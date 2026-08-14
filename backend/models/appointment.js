@@ -8,6 +8,7 @@ const appointmentSchema = new mongoose.Schema({
     date: { type: String, required: true },
     timeSlot: { type: String, required: true },
     timezone: { type: String, default: 'Europe/Paris' },
+    slotDate: { type: String, default: '' },
     status: { type: String, enum: ['pending', 'confirmed', 'cancelled'], default: 'pending' },
 }, { timestamps: true });
 

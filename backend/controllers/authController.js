@@ -67,10 +67,19 @@ const register = async (req, res) => {
         if (user) {
             const tokens = await generateTokens(user._id);
 
-            // Send welcome email
-            await sendEmail({
+            // Generate email verification token
+            const verifyToken = crypto.randomBytes(32).toString('hex');
+            user.emailVerificationToken = crypto.createHash('sha256').update(verifyToken).digest('hex');
+            user.emailVerificationExpire = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+            await user.save();
+
+            const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+            const verifyUrl = `${frontendUrl}?verify_token=${verifyToken}`;
+
+            // Send verification email
+            const emailSent = await sendEmail({
                 to: user.email,
-                subject: 'Welcome to EBI Services – Account Created Successfully',
+                subject: 'EBI Services – Verify Your Email Address',
                 html: `
 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
   <div style="background: #1e3a5f; color: white; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
@@ -78,14 +87,11 @@ const register = async (req, res) => {
   </div>
   <div style="padding: 20px; color: #374151;">
     <h2 style="color: #1e3a5f;">Welcome, ${user.fullname}!</h2>
-    <p>Your account has been created successfully. You can now access your client portal to:</p>
-    <ul>
-      <li>Submit project requests and get quotes</li>
-      <li>Book consultations with our team</li>
-      <li>Track your documents and communications</li>
-      <li>Chat with department managers</li>
-    </ul>
-    <p>If you have any questions, feel free to contact our support team.</p>
+    <p>Your account has been created successfully. Please verify your email address by clicking the button below:</p>
+    <div style="text-align: center; margin: 25px 0;">
+      <a href="${verifyUrl}" style="background: #1e3a5f; color: white; padding: 12px 30px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block;">Verify Email Address</a>
+    </div>
+    <p>This link expires in 24 hours. If you did not create this account, please ignore this email.</p>
     <p style="margin-top: 20px;">Best regards,<br><strong>The EBI Services Team</strong></p>
   </div>
   <div style="background: #f9fafb; padding: 15px; border-radius: 0 0 8px 8px; text-align: center; font-size: 12px; color: #9ca3af;">
@@ -93,6 +99,9 @@ const register = async (req, res) => {
   </div>
 </div>`
             });
+            if (!emailSent) {
+                console.log(`\n=== EMAIL FALLBACK === Verify URL for ${user.email}: ${verifyUrl}\n`);
+            }
 
             res.status(201).json({
                 _id: user.id,
@@ -127,6 +136,9 @@ const login = async (req, res) => {
         const user = await User.findOne({ email });
 
         if (user && (await bcrypt.compare(password, user.password))) {
+            if (!user.emailVerified) {
+                return res.status(403).json({ message: 'Please verify your email address before logging in. Check your inbox for the verification link.' });
+            }
             const tokens = await generateTokens(user._id);
             res.json({
                 _id: user.id,
@@ -174,9 +186,9 @@ const forgotPassword = async (req, res) => {
         await user.save();
 
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-        const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
+        const resetUrl = `${frontendUrl}/reset-password?reset_token=${resetToken}`;
 
-        await sendEmail({
+        const emailSent = await sendEmail({
             to: user.email,
             subject: 'EBI Services – Password Reset Request',
             html: `
@@ -190,6 +202,7 @@ const forgotPassword = async (req, res) => {
     <div style="text-align: center; margin: 25px 0;">
       <a href="${resetUrl}" style="background: #1e3a5f; color: white; padding: 12px 30px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block;">Reset Password</a>
     </div>
+    <p style="font-size: 12px; color: #6b7280;">If the button does not work, copy and paste this link into your browser:<br><a href="${resetUrl}" style="color: #1e3a5f; word-break: break-all;">${resetUrl}</a></p>
     <p>If you did not request this, please ignore this email.</p>
     <p style="margin-top: 20px;">Best regards,<br><strong>The EBI Services Team</strong></p>
   </div>
@@ -198,6 +211,9 @@ const forgotPassword = async (req, res) => {
   </div>
 </div>`
         });
+        if (!emailSent) {
+            console.log(`\n=== EMAIL FALLBACK === Reset URL for ${user.email}: ${resetUrl}\n`);
+        }
 
         res.json({ message: 'Password reset email sent' });
     } catch (error) {
@@ -230,7 +246,97 @@ const resetPassword = async (req, res) => {
         user.resetPasswordExpire = undefined;
         await user.save();
 
+        // Revoke all existing sessions so old tokens are invalidated
+        await Token.updateMany({ utilisateur: user._id, actif: true }, { actif: false });
+
         res.json({ message: 'Password reset successful' });
+    } catch (error) {
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+};
+
+// @desc    Verify email with token
+// @route   POST /api/auth/verify-email
+// @access  Public
+const verifyEmail = async (req, res) => {
+    try {
+        const { token } = req.body;
+        if (!token) {
+            return res.status(400).json({ message: 'Verification token is required' });
+        }
+
+        const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+        const user = await User.findOne({
+            emailVerificationToken: hashedToken,
+            emailVerificationExpire: { $gt: Date.now() },
+        });
+
+        if (!user) {
+            return res.status(400).json({ message: 'Invalid or expired verification token' });
+        }
+
+        user.emailVerified = true;
+        user.emailVerificationToken = undefined;
+        user.emailVerificationExpire = undefined;
+        await user.save();
+
+        res.json({ message: 'Email verified successfully. You can now log in.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+};
+
+// @desc    Resend verification email
+// @route   POST /api/auth/resend-verification
+// @access  Public
+const resendVerification = async (req, res) => {
+    try {
+        const { email } = req.body;
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({ message: 'No account with that email exists' });
+        }
+
+        if (user.emailVerified) {
+            return res.status(400).json({ message: 'Email is already verified' });
+        }
+
+        const verifyToken = crypto.randomBytes(32).toString('hex');
+        user.emailVerificationToken = crypto.createHash('sha256').update(verifyToken).digest('hex');
+        user.emailVerificationExpire = Date.now() + 24 * 60 * 60 * 1000;
+        await user.save();
+
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        const verifyUrl = `${frontendUrl}?verify_token=${verifyToken}`;
+
+        const emailSent = await sendEmail({
+            to: user.email,
+            subject: 'EBI Services – Verify Your Email Address',
+            html: `
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
+  <div style="background: #1e3a5f; color: white; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
+    <h1 style="margin: 0; font-size: 20px;">EBI Services</h1>
+  </div>
+  <div style="padding: 20px; color: #374151;">
+    <h2 style="color: #1e3a5f;">Verify Your Email</h2>
+    <p>Click the button below to verify your email address. This link expires in 24 hours.</p>
+    <div style="text-align: center; margin: 25px 0;">
+      <a href="${verifyUrl}" style="background: #1e3a5f; color: white; padding: 12px 30px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block;">Verify Email Address</a>
+    </div>
+    <p>If you did not request this, please ignore this email.</p>
+    <p style="margin-top: 20px;">Best regards,<br><strong>The EBI Services Team</strong></p>
+  </div>
+  <div style="background: #f9fafb; padding: 15px; border-radius: 0 0 8px 8px; text-align: center; font-size: 12px; color: #9ca3af;">
+    &copy; ${new Date().getFullYear()} EBI Services. All rights reserved.
+  </div>
+</div>`
+        });
+        if (!emailSent) {
+            console.log(`\n=== EMAIL FALLBACK === Verify URL for ${user.email}: ${verifyUrl}\n`);
+        }
+
+        res.json({ message: 'Verification email sent' });
     } catch (error) {
         res.status(500).json({ message: 'Server error', error: error.message });
     }
@@ -242,4 +348,6 @@ module.exports = {
     getMe,
     forgotPassword,
     resetPassword,
+    verifyEmail,
+    resendVerification,
 };

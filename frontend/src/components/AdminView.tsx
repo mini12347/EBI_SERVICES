@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Users,
   TrendingUp,
@@ -18,6 +18,8 @@ import {
   Mail,
   MessageCircle,
   BarChart3,
+  Send,
+  CalendarDays,
 } from "lucide-react";
 import {
   AreaChart,
@@ -41,6 +43,8 @@ import {
   Quote,
   ActivityLog,
   SystemSettings,
+  Message,
+  Conversation,
 } from "../types";
 import { clientDb } from "../clientDb";
 import { apiGetUsers, apiGetUsersByRole } from "../api/auth";
@@ -51,6 +55,18 @@ import {
   apiCreateDevis,
   apiUpdateDevis,
 } from "../api/quotes";
+import {
+  apiGetMessages,
+  apiGetMessagesByClient,
+  apiCreateMessage,
+  ApiMessage,
+} from "../api/messages";
+import {
+  apiGetLeads,
+  apiUpdateLead,
+  apiDeleteLead,
+} from "../api/leads";
+import { apiGetAllAppointments, apiUpdateAppointmentStatus } from "../api/appointments";
 
 interface AdminViewProps {
   currentUser: User;
@@ -59,7 +75,7 @@ interface AdminViewProps {
 
 export default function AdminView({ currentUser, token }: AdminViewProps) {
   const [adminSubTab, setAdminSubTab] = useState<
-    "dashboard" | "crm" | "quotes" | "appointments" | "settings" | "logs"
+    "dashboard" | "crm" | "quotes" | "appointments" | "messaging" | "settings" | "logs"
   >("dashboard");
 
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -93,8 +109,17 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
   const [emailTemplateQuote, setEmailTemplateQuote] = useState("");
   const [emailTemplateAppointment, setEmailTemplateAppointment] = useState("");
 
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [chatMessages, setChatMessages] = useState<Message[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const apiLeadsRef = useRef<Lead[]>([]);
+
   useEffect(() => {
     fetchAdminData();
+    fetchMessagingData();
     const interval = setInterval(fetchAdminData, 12000);
     return () => clearInterval(interval);
   }, [token]);
@@ -139,6 +164,32 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
       }
     } catch { /* fallback */ }
 
+    // Try backend for leads collected by the chatbot / contact form
+    try {
+      const apiLeads = await apiGetLeads();
+      if (apiLeads && apiLeads.length > 0) {
+        apiLeadsRef.current = apiLeads.map((l: any) => ({
+          id: l._id,
+          name: l.name,
+          company: l.company,
+          email: l.email,
+          phone: l.phone,
+          country: l.country,
+          projectDescription: l.projectDescription,
+          budget: l.budget,
+          deadline: l.deadline,
+          status: l.status,
+          suggestedDepartment: l.suggestedDepartment,
+          priority: l.priority,
+          conversationSummary: l.source ? `Source: ${l.source}` : undefined,
+          notes: l.notes || "",
+          createdAt: l.createdAt,
+        }));
+      }
+    } catch {
+      apiLeadsRef.current = [];
+    }
+
     // Try clientDb for all data (fills gaps the API doesn't cover)
     try {
       const rLeads = clientDb.getLeads();
@@ -148,13 +199,47 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
       const rLogs = clientDb.getLogs();
       const rSettings = clientDb.getSettings();
 
-      setLeads(rLeads);
-      setAppointments(rApts);
+      // Merge backend appointments (created from the client portal / chatbot)
+      try {
+        const apiApts = await apiGetAllAppointments();
+        if (apiApts && apiApts.length > 0) {
+          const mapped: Appointment[] = apiApts.map((a: any) => ({
+            id: a._id,
+            userId: a.userId,
+            clientName: a.clientName,
+            clientEmail: a.clientEmail,
+            title: a.title,
+            date: a.date,
+            timeSlot: a.timeSlot,
+            timezone: a.timezone,
+            status: a.status,
+            adminNotes: a.adminNotes,
+            createdAt: a.createdAt,
+          }));
+          const merged = new Map<string, Appointment>();
+          rApts.forEach((a) => merged.set(a.id, a));
+          mapped.forEach((a) => merged.set(a.id, a));
+          setAppointments(Array.from(merged.values()));
+        } else {
+          setAppointments(rApts);
+        }
+      } catch {
+        setAppointments(rApts);
+      }
+
       if (rReqs.length > 0) setQuoteRequests(rReqs);
       if (rQuotes.length > 0) setQuotes(rQuotes);
       setLogs(rLogs);
 
-      const totalLeads = rLeads.length;
+      const mergedLeads = new Map<string, Lead>();
+      rLeads.forEach((l) => mergedLeads.set(l.id, l));
+      apiLeadsRef.current.forEach((l) => {
+        if (!mergedLeads.has(l.id)) mergedLeads.set(l.id, l);
+      });
+      const leadsAll = Array.from(mergedLeads.values());
+      setLeads(leadsAll);
+
+      const totalLeads = leadsAll.length;
       const totalClients = clientDb
         .getUsers()
         .filter((u) => u.role === "client").length;
@@ -180,7 +265,7 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
         Recruitment: 0,
         Outsourcing: 0,
       };
-      rLeads.forEach((l) => {
+      leadsAll.forEach((l) => {
         const dept = l.suggestedDepartment || "Development";
         if (requestsByDept[dept] !== undefined) {
           requestsByDept[dept]++;
@@ -222,6 +307,112 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
     }
   };
 
+  const fetchMessagingData = async () => {
+    const users = clientDb.getUsers();
+    setAllUsers(users);
+
+    const clientUsers = users.filter((u) => u.role === "client");
+    const convs = clientDb.getConversations();
+    setConversations(convs);
+
+    if (!selectedConversation && convs.length > 0) {
+      setSelectedConversation(convs[0]);
+    }
+  };
+
+  const fetchChatMessages = async (conversationId: string) => {
+    const conv = conversations.find((c) => c.id === conversationId);
+    if (!conv) return;
+
+    try {
+      const apiMessages = await apiGetMessagesByClient(conv.userId);
+      if (apiMessages && apiMessages.length > 0) {
+        const mapped: Message[] = apiMessages.map((m: ApiMessage) => ({
+          id: m._id,
+          conversationId: conversationId,
+          senderId: typeof m.expediteur === "object" ? m.expediteur._id : m.expediteur,
+          senderName: typeof m.expediteur === "object" ? m.expediteur.fullname : "",
+          senderRole: (typeof m.expediteur === "object" ? m.expediteur.role : "admin") as "admin" | "client",
+          text: m.contenu,
+          timestamp: m.createdAt,
+        }));
+        setChatMessages(mapped);
+        return;
+      }
+    } catch {
+      // fallback to clientDb
+    }
+
+    const allMsgs = clientDb.getMessages();
+    const convMsgs = allMsgs.filter((m) => m.conversationId === conversationId);
+    setChatMessages(convMsgs);
+  };
+
+  useEffect(() => {
+    if (selectedConversation) {
+      fetchChatMessages(selectedConversation.id);
+    }
+  }, [selectedConversation]);
+
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatMessages]);
+
+  const handleSendMessage = async () => {
+    if (!chatInput.trim() || !selectedConversation) return;
+
+    const clientUser = allUsers.find((u) => u.id === selectedConversation.userId);
+
+    try {
+      await apiCreateMessage({
+        client: selectedConversation.userId,
+        expediteur: currentUser.id,
+        contenu: chatInput,
+        client_email: clientUser?.email,
+      });
+    } catch {
+      // fallback to clientDb
+    }
+
+    try {
+      const newMsg: Message = {
+        id: `msg-${Date.now()}`,
+        conversationId: selectedConversation.id,
+        senderId: currentUser.id,
+        senderName: currentUser.name,
+        senderRole: "admin",
+        text: chatInput,
+        timestamp: new Date().toISOString(),
+      };
+
+      const allMsgs = clientDb.getMessages();
+      allMsgs.push(newMsg);
+      clientDb.setMessages(allMsgs);
+
+      const convs = clientDb.getConversations();
+      const conv = convs.find((c) => c.id === selectedConversation.id);
+      if (conv) {
+        conv.lastMessageAt = new Date().toISOString();
+        conv.summary = `Last message: ${chatInput.substring(0, 40)}...`;
+        clientDb.setConversations(convs);
+      }
+
+      clientDb.addNotification(
+        selectedConversation.userId,
+        "New Message from EBI",
+        `New message from ${currentUser.name}: "${chatInput.substring(0, 50)}"`,
+      );
+
+      setChatInput("");
+      fetchChatMessages(selectedConversation.id);
+      fetchMessagingData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   function mapStatut(s: string): QuoteRequest["status"] {
     const map: Record<string, QuoteRequest["status"]> = {
       en_attente: "new",
@@ -242,7 +433,19 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
     return map[s] || "sent";
   }
 
-  const handleUpdateLead = (leadId: string, updates: Partial<Lead>) => {
+  const handleUpdateLead = async (leadId: string, updates: Partial<Lead>) => {
+    try {
+      if (/^[0-9a-f]{24}$/i.test(leadId)) {
+        await apiUpdateLead(leadId, {
+          status: updates.status,
+          priority: updates.priority,
+          suggestedDepartment: updates.suggestedDepartment,
+          notes: updates.notes,
+        } as any);
+      }
+    } catch (err) {
+      console.error("API lead update failed:", err);
+    }
     try {
       const leadsList = clientDb.getLeads();
       const updatedList = leadsList.map((l) => {
@@ -265,13 +468,20 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
     }
   };
 
-  const handleDeleteLead = (leadId: string) => {
+  const handleDeleteLead = async (leadId: string) => {
     if (
       !window.confirm(
         "Are you sure you want to delete this lead? This action cannot be undone.",
       )
     )
       return;
+    try {
+      if (/^[0-9a-f]{24}$/i.test(leadId)) {
+        await apiDeleteLead(leadId);
+      }
+    } catch (err) {
+      console.error("API lead delete failed:", err);
+    }
     try {
       const leadsList = clientDb.getLeads();
       const filtered = leadsList.filter((l) => l.id !== leadId);
@@ -294,6 +504,14 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
     customNotes?: string,
   ) => {
     try {
+      // Sync to backend when the appointment lives there (Mongo ObjectId)
+      try {
+        apiUpdateAppointmentStatus(aptId, {
+          status,
+          ...(customNotes !== undefined ? { adminNotes: customNotes } : {}),
+        });
+      } catch { /* fallback to clientDb */ }
+
       const aptsList = clientDb.getAppointments();
       const found = aptsList.find((a) => a.id === aptId);
       if (found) {
@@ -321,11 +539,31 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
     }
   };
 
-  const handleIssueQuote = (e: React.FormEvent) => {
+  const handleIssueQuote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedReq || !quoteAmount) return;
 
     setIsIssuingQuote(true);
+
+    // Persist the quote through the backend API — this auto-generates the PDF
+    try {
+      await apiCreateDevis({
+        demande: selectedReq.id,
+        montant: parseFloat(quoteAmount),
+      });
+      clientDb.addActivityLog(
+        currentUser.id,
+        currentUser.name,
+        `Issued quotation of €${quoteAmount} for "${selectedReq.projectType}"`,
+      );
+      setSelectedReq(null);
+      setQuoteAmount("");
+      fetchAdminData();
+      return;
+    } catch (err) {
+      console.error('API quote creation failed, falling back to local:', err);
+    }
+
     try {
       const quotesList = clientDb.getQuotes();
       const newQuote: Quote = {
@@ -509,6 +747,7 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
             { id: "crm", label: "Manage Leads" },
             { id: "quotes", label: "Quote Proposals" },
             { id: "appointments", label: "Appointments Board" },
+            { id: "messaging", label: "Messaging" },
             { id: "settings", label: "System Configs" },
             { id: "logs", label: "Audits Logs" },
           ].map((sub) => (
@@ -589,6 +828,32 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
                 Quotes awaiting client
               </span>
             </div>
+          </div>
+
+          {}
+          <div className="bg-gradient-to-r from-blue-900 to-blue-950 rounded-2xl p-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-left">
+            <div className="flex items-center gap-3">
+              <span className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center">
+                <CalendarDays className="h-5 w-5 text-white" />
+              </span>
+              <div>
+                <h3 className="font-display text-sm font-bold text-white">
+                  Appointments Board
+                </h3>
+                <p className="text-[10px] text-blue-200">
+                  {appointments.length} appointment
+                  {appointments.length === 1 ? "" : "s"} — review pending
+                  requests, confirm schedules, and add SLA comments.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setAdminSubTab("appointments")}
+              className="rounded-lg bg-white text-blue-900 px-4 py-2 text-xs font-bold shadow hover:bg-blue-50 transition cursor-pointer flex items-center gap-1.5"
+            >
+              <CalendarDays className="h-4 w-4" />
+              Open Board
+            </button>
           </div>
 
           {}
@@ -1161,6 +1426,119 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {adminSubTab === "messaging" && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden" style={{ height: "calc(100vh - 280px)", minHeight: "500px" }}>
+          <div className="flex h-full">
+            {/* Left: Conversation List */}
+            <div className="w-80 border-r border-gray-200 flex flex-col">
+              <div className="p-4 border-b border-gray-100">
+                <h3 className="font-display text-sm font-bold text-slate-950 text-left">Client Conversations</h3>
+                <span className="text-[10px] text-gray-400">Select a client to view their chat thread</span>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                {conversations.length === 0 && (
+                  <div className="p-6 text-center text-xs text-gray-400">No conversations yet</div>
+                )}
+                {conversations
+                  .sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime())
+                  .map((conv) => (
+                    <button
+                      key={conv.id}
+                      onClick={() => setSelectedConversation(conv)}
+                      className={`w-full p-4 text-left border-b border-gray-50 hover:bg-slate-50 transition cursor-pointer ${
+                        selectedConversation?.id === conv.id ? "bg-blue-50/60 border-l-2 border-l-blue-900" : ""
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-900 truncate">{conv.clientName || "Client"}</span>
+                        {conv.lastMessageAt && (
+                          <span className="text-[9px] text-gray-400 whitespace-nowrap ml-2">
+                            {new Date(conv.lastMessageAt).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                      {(conv.repName || conv.repRole) && (
+                        <span className="block text-[9px] font-bold text-blue-900 truncate mt-0.5">
+                          {conv.repName} · {conv.repRole}
+                        </span>
+                      )}
+                      {conv.summary && (
+                        <span className="block text-[10px] text-gray-400 truncate mt-0.5">{conv.summary}</span>
+                      )}
+                    </button>
+                  ))}
+              </div>
+            </div>
+
+            {/* Right: Message Thread */}
+            <div className="flex-1 flex flex-col">
+              {!selectedConversation ? (
+                <div className="flex-1 flex items-center justify-center text-xs text-gray-400">
+                  Select a client conversation to start messaging
+                </div>
+              ) : (
+                <>
+                  {/* Header */}
+                  <div className="p-4 border-b border-gray-100 flex items-center space-x-3">
+                    <div className="h-8 w-8 rounded-full bg-blue-950 flex items-center justify-center text-white text-[10px] font-bold">
+                      {(selectedConversation.clientName || "C").charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <span className="block text-xs font-bold text-slate-900">{selectedConversation.clientName || "Client"}</span>
+                      <span className="block text-[10px] text-gray-400">Direct Support Channel</span>
+                    </div>
+                  </div>
+
+                  {/* Messages */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
+                    {chatMessages.length === 0 && (
+                      <div className="text-center text-[10px] text-gray-400 py-8">No messages yet. Send the first message below.</div>
+                    )}
+                    {chatMessages.map((m) => (
+                      <div key={m.id} className={`flex items-start space-x-2 ${m.senderId === currentUser.id ? "flex-row-reverse space-x-reverse" : ""}`}>
+                        <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${
+                          m.senderId === currentUser.id ? "bg-blue-600" : "bg-blue-950"
+                        }`}>
+                          {m.senderId === currentUser.id ? "Me" : "C"}
+                        </div>
+                        <div className={`max-w-[70%] rounded-xl px-3 py-2 text-xs shadow-sm ${
+                          m.senderId === currentUser.id
+                            ? "bg-blue-600 text-white rounded-tr-none"
+                            : "bg-white border border-gray-200 text-gray-800 rounded-tl-none text-left"
+                        }`}>
+                          <span className="block text-[8px] opacity-60 font-semibold mb-0.5">{m.senderName}</span>
+                          {m.text}
+                        </div>
+                      </div>
+                    ))}
+                    <div ref={chatEndRef} />
+                  </div>
+
+                  {/* Input */}
+                  <div className="p-4 border-t border-gray-100 bg-white flex items-center space-x-2">
+                    <input
+                      type="text"
+                      placeholder="Type a message to this client..."
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+                      className="flex-1 rounded-xl border border-gray-200 px-3.5 py-2 text-xs focus:ring-1 focus:ring-blue-900 focus:outline-none"
+                    />
+                    <button
+                      onClick={handleSendMessage}
+                      disabled={!chatInput.trim()}
+                      className="h-8 w-8 rounded-xl bg-blue-900 text-white flex items-center justify-center hover:bg-blue-950 transition disabled:opacity-45 cursor-pointer"
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

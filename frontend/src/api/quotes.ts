@@ -67,3 +67,24 @@ export async function apiCreateDevis(body: {
 export async function apiUpdateDevis(id: string, body: Partial<ApiDevis>) {
   return put<{ message: string; devis: ApiDevis }>(`/devis/${id}`, body);
 }
+
+export async function apiDownloadQuotePDF(id: string): Promise<void> {
+  const token = localStorage.getItem('ebi_api_token');
+  const headers: Record<string, string> = {};
+  if (token && token.length > 10) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  const res = await fetch(`/api/devis/${id}/download`, { headers });
+  if (!res.ok) {
+    throw new Error('Failed to download quote PDF');
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `quote-${id}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

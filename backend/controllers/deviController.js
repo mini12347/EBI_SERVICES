@@ -1,6 +1,7 @@
 const Devis = require('../models/devi');
 const DemandeDevis = require('../models/demandeDevi');
 const sendEmail = require('../utils/sendEmail');
+const { generateQuotePDF } = require('../utils/pdfGenerator');
 const fs = require('fs');
 const path = require('path');
 
@@ -34,8 +35,29 @@ const getByDemande = async (req, res) => {
 
 const create = async (req, res) => {
     try {
-        const { demande, fichier_pdf, montant } = req.body;
-        const devis = await Devis.create({ demande, fichier_pdf, montant });
+        const { demande, fichier_pdf, montant, terms } = req.body;
+
+        if (fichier_pdf) {
+            const devis = await Devis.create({ demande, fichier_pdf, montant });
+            return res.status(201).json({ message: 'Devis created', devis });
+        }
+
+        // Auto-generate the quote PDF if none was uploaded
+        const demandeDoc = await DemandeDevis.findById(demande)
+            .populate('client')
+            .populate('service');
+
+        const devis = await Devis.create({ demande, fichier_pdf: 'pending', montant });
+        const pdfPath = await generateQuotePDF({
+            devis,
+            demande: demandeDoc,
+            client: demandeDoc ? demandeDoc.client : null,
+            service: demandeDoc ? demandeDoc.service : null,
+            terms,
+        });
+        devis.fichier_pdf = pdfPath;
+        await devis.save();
+
         res.status(201).json({ message: 'Devis created', devis });
     } catch (error) {
         res.status(500).json({ message: 'Error creating devis', error: error.message });
@@ -44,9 +66,14 @@ const create = async (req, res) => {
 
 const update = async (req, res) => {
     try {
+        const allowedFields = ['montant', 'statut', 'fichier_pdf'];
+        const updates = {};
+        for (const key of allowedFields) {
+            if (req.body[key] !== undefined) updates[key] = req.body[key];
+        }
         const devis = await Devis.findByIdAndUpdate(
             req.params.id,
-            { $set: req.body },
+            { $set: updates },
             { returnDocument: 'after', runValidators: true }
         );
         if (!devis) return res.status(404).json({ message: 'Devis not found' });
@@ -68,15 +95,30 @@ const deleteDevis = async (req, res) => {
 
 const uploadQuotePDF = async (req, res) => {
     try {
-        const { demande, montant, client_email } = req.body;
-        
-        if (!req.file) {
-            return res.status(400).json({ message: 'No file uploaded' });
+        const { demande, montant, client_email, terms } = req.body;
+
+        let pdfPath = req.file ? req.file.path : null;
+
+        if (!pdfPath) {
+            // No file uploaded — auto-generate the quote PDF
+            const demandeDoc = await DemandeDevis.findById(demande)
+                .populate('client')
+                .populate('service');
+            const devisTmp = await Devis.create({ demande, fichier_pdf: 'pending', montant });
+            pdfPath = await generateQuotePDF({
+                devis: devisTmp,
+                demande: demandeDoc,
+                client: demandeDoc ? demandeDoc.client : null,
+                service: demandeDoc ? demandeDoc.service : null,
+                terms,
+            });
+            devisTmp.fichier_pdf = pdfPath;
+            await devisTmp.save();
         }
         
         const devis = await Devis.create({ 
             demande, 
-            fichier_pdf: req.file.path, 
+            fichier_pdf: pdfPath, 
             montant 
         });
 

@@ -1,6 +1,0 @@
-{
-  "name": "EBI Services",
-  "description": "Premium SaaS enterprise platform and corporate CRM for EBI Services, featuring an AI chatbot, client portal, quote generator, calendar booking, and analytics.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

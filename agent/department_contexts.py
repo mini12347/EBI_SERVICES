@@ -1,140 +1,146 @@
 GENERAL_BASE = """
 ====================================
-EBI SERVICES – PRESENTATION GÉNÉRALE
+EBI SERVICES – GENERAL PRESENTATION
 ====================================
-Name: EBI Services | Nom: EBI Services
+Name: EBI Services
 Slogan: "Votre Partenaire en Performance et Transformation"
 Founded: Paris, France (8+ years)
 CEO & Founder: Jean-Pierre Laurent
 Industries: Custom Software, IT Recruitment, Back-Office & Call Center Outsourcing
 Status: ISO 27001 Prepared
 
-Core business: EBI Services delivers custom software ecosystems, IT technical
-recruiting pipelines, and scalable back-office tele-services to enterprises
-worldwide. The company provides solutions d'externalisation destinées aux
-entreprises européennes.
+Core business: Custom software ecosystems, IT technical recruiting pipelines,
+and scalable back-office tele-services to enterprises worldwide.
 
-Partner logos (homepage): Aura Fintech, Cyberdyne Systems, Carrefour France,
-Innovatech Sourcing, Global Tele-Hub.
+Partner logos: Aura Fintech, Cyberdyne Systems, Carrefour France, Innovatech Sourcing, Global Tele-Hub.
 
 Key statistics:
 - SLA Code Delivery: 98.7%
 - Vetted Engineers: 450+
-- Global Coverage: 24/7 (bilingual operators)
-- Client Revenue Optimized: EUR15M+ (through custom ERPs)
+- Global Coverage: 24/7 (bilingual)
+- Client Revenue Optimized: EUR15M+
 
-Core benefits:
-1) Rapid Execution & Integration – agile development, record-time delivery
-2) Bank-Grade Technical Audits – compliance vetting, security audits
-3) Elite Pre-Screened Talent – thorough candidate screenings
-
-Gamme de services:
+Services:
 1) Tele-services
 2) Business Process Outsourcing (BPO)
 3) Solutions IT & Digitales
 4) Sourcing & Integration de profils
 
-Coordonnees de contact:
-- Email: contact@ebiservices.net / servicesdossiers@gmail.com
-- Email (contact page): contact@ebiservices.com
-- Phone: +33 6 95 63 16 12 / +32 460 24 17 40 / +216 56 566 533
-- Phone (contact page): +33 1 74 88 99 00
-- Site web: www.ebiservices.net
-- Siege social: 50 rue d'Algerie, 7000 Bizerte
-- Headquarters: 12 Avenue des Champs-Elysees, Paris, France
-- GPS: 48.8698° N, 2.3075° E
-- Horaires: lundi au vendredi, 8h30-16h
-- Working hours: 08:30 AM - 06:30 PM (CET), Monday to Friday
+Contact:
+- Phone: +33 1 74 88 99 00
+- Email: contact@ebiservices.com
+- Address: 12 Avenue des Champs-Elysees, Paris, France
+- Hours: 08:30 AM - 06:30 PM (CET), Monday to Friday
+
+====================================
+WEB APPLICATION – HOW TO USE IT
+====================================
+EBI Services has a full web application at ebiservices.com with these pages:
+
+PUBLIC PAGES (no login needed):
+- Home page: company presentation, stats, testimonials
+- Services page: 3 department tabs with detailed info
+- About page: company overview, values, CEO vision
+- Contact page: contact form (Name, Email, Phone, Need), FAQ, phone/address
+
+ACCOUNT PAGES:
+- Register: create an account (Name, Company, Email, Password)
+- Login: access portal with Email and Password
+- Reset Password: via email link
+
+CLIENT PORTAL (after login as client):
+- Overview: dashboard with stats (quotes, appointments, requests)
+- Quotations & Requests: submit quote requests, view/accept/reject formal quotes
+- Consultations: view appointments, cancel pending ones
+- Manager Chat: direct messaging with EBI team
+- Secure Vault: upload/download/delete documents (PDF, Word, Excel, Images, max 10MB)
+- Top buttons: "Request Quote" and "Book Consultation"
+
+QUOTE REQUEST WORKFLOW:
+1. Click "Request Quote" in portal
+2. Fill: Industry, Project Category, Budget (EUR 5k-100k+), Deadline, Requirements, optional RFP
+3. Submit -> status "new"
+4. EBI reviews and issues formal quote -> status "quoted"
+5. Client sees quote with pricing and terms
+6. Client clicks "Accept & Sign SLA" or "Reject Quote"
+
+CONSULTATION BOOKING WORKFLOW:
+1. Click "Book Consultation" in portal
+2. Fill: Meeting Objective, Date, Time Slot (09:00-18:00), Timezone (Paris/NY/Singapore/UTC)
+3. Submit -> status "pending"
+4. EBI confirms -> status "confirmed"
+5. Client gets notification, can cancel if pending
+
+NAVIGATION GUIDE FOR USERS:
+- "I need a quote" -> "Register/login, go to Portal, click 'Request Quote'"
+- "Book a meeting" -> "Register/login, go to Portal, click 'Book Consultation'"
+- "Contact you" -> "Go to Contact page or call +33 1 74 88 99 00"
+- "Upload a document" -> "Login, go to Portal > Secure Vault"
+- "Chat with manager" -> "Login, go to Portal > Manager Chat"
+- "Forgot password" -> "Go to Login page, click 'Forgot Password'"
+- "See my quotes" -> "Login, go to Portal > Quotations & Requests"
+- "Cancel appointment" -> "Login, go to Portal > Consultations > Cancel"
 """
+
 
 DEPARTMENT_CONTEXTS = {
     "Tele-services": """
 --------------------------------------------------------------
 TELE-SERVICES / CALL CENTER & TELE-SERVICES
 --------------------------------------------------------------
-Bilingual: English & French
-Coverage: 24/7 operations, 7 days a week
+Bilingual: English & French, 24/7 coverage
 
-a) Gestion des appels entrants (Inbound Call Management)
-   Reactif 7j/7 – 24h/24. Reponse aux demandes clients, assistance
-   telephonique, SAV, gestion des reclamations, prise de messages,
-   support technique.
+Services:
+a) Inbound Call Management (7j/7 - 24h/24) - customer requests, tech support, complaints
+b) Outbound Sales & Prospection B2B/B2C - campaigns, lead qualification, closing
+c) Qualified Appointment Setting - prospect qualification, scheduling, follow-up
+d) Virtual Secretariat & Agenda Management - call reception, messages, admin follow-up
+e) Customer Satisfaction Surveys & Retention - surveys, loyalty campaigns, post-sale follow-up
+f) Data Entry & Processing - admin/accounting entry, database updates, archiving (Excel, CRM, ERP)
+g) Traffic Creation & Lead Generation - email, SMS, social media, SEO, SEA campaigns
 
-b) Televente & prospection B2B / B2C (Outbound Sales)
-   Campagnes de televente, prospection B2B/B2C, presentation d'offres,
-   qualification de leads, closing des ventes, prise de RDV.
+SLA targets: ASA < 90 seconds, resolution > 97%, weekly reports
 
-c) Prise de rendez-vous qualifies (Qualified Appointments)
-   Qualification prospects, prise de RDV, gestion agendas, confirmation.
-
-d) Téléscretariat & gestion d'agendas (Virtual Secretariat)
-   Reception d'appels, gestion d'agendas, transmission de messages,
-   suivi administratif, gestion emails.
-
-e) Enquetes de satisfaction & fidelisation (Surveys & Retention)
-   Enquetes satisfaction, analyse retours, campagnes fidelisation,
-   suivi post-vente, reporting.
-
-f) Saisie & Traitement de Donnees (Data Entry & Processing)
-   Saisie administrative et comptable, mise a jour bases de donnees,
-   numerisation et archivage, controle conformite. Outils: Excel, CRM, ERP.
-
-g) Creation de Trafic & Generation de Leads (Traffic & Lead Gen)
-   Campagnes multicanal: e-mailing, SMS, reseaux sociaux, SEO, SEA.
-   Analyse du trafic et reporting.
-
-SLA targets:
-- Average Speed of Answer (ASA): < 90 seconds
-- Daily ticket resolution rate: > 97%
-- Weekly supervisor reports
+To get tele-services: "Go to the Contact page to submit a request, or register for a Client Portal account and submit a Quote Request selecting 'Bilingual Call Center Outsource' as the project category."
 """,
 
     "Business Process Outsourcing (BPO)": """
 --------------------------------------------------------------
 BUSINESS PROCESS OUTSOURCING (BPO)
 --------------------------------------------------------------
-Externalisation des processus metiers pour ameliorer l'efficacite
-operationnelle, reduire les couts et gagner en agilite.
+Externalisation des processus metiers for operational efficiency, cost reduction, agility.
 
-Services BPO:
-- Externalisation de la relation client (Call Center & Teléservices)
-- Gestion back-office et taches administratives
-- Saisie et traitement de donnees
-- Gestion des commandes et suivi clients
-- Support technique (niveau 1)
-- Assistance operationnelle sur mesure
-- Conduite de travaux
+Services:
+- Customer Relations Outsourcing (Call Center & Tele-services)
+- Back-office & Administrative Tasks
+- Data Entry & Processing
+- Order Management & Customer Follow-up
+- Level 1 Technical Support
+- Custom Operational Assistance
+
+To get BPO services: "Go to the Contact page to submit a request, or register for a Client Portal account and submit a Quote Request selecting 'Back-office Admin Support' as the project category."
 """,
 
     "Solutions IT & Digitales": """
 --------------------------------------------------------------
 SOLUTIONS IT & DIGITALES / SOFTWARE DEVELOPMENT
 --------------------------------------------------------------
-Technologies: React 19, TypeScript, Tailwind CSS (frontend)
-             RESTful APIs & Webhooks (backend)
-             PostgreSQL & SQLite (databases)
-Methodology: Agile / Scrum, 3-phase sprints
+Tech: React 19, TypeScript, Tailwind CSS, RESTful APIs, PostgreSQL, SQLite
+Methodology: Agile/Scrum, 3-phase sprints
 
-a) Services Managés (Managed IT Services)
-   Gestion proactive des infrastructures: supervision continue,
-   prevention et resolution proactive des incidents, securite,
-   disponibilite, reduction des risques.
-
-b) Services Web & Mobile (Web & Mobile Development)
-   Conception et developpement de solutions web et mobiles sur mesure,
-   performantes et evolutives. Applications modernes et securisees.
-
-c) Developpement & Integration ERP (ERP Development)
-   Conception et integration de progiciels ERP. Custom inventory mgmt,
-   barcode/RFID scanners, logistics routing, automated resource planning.
+Services:
+a) Managed IT Services - proactive infrastructure management
+b) Web & Mobile Development - custom solutions on demand
+c) ERP Development & Integration - custom inventory, barcode/RFID, logistics
 
 Sprint phases:
 - Phase 1: Requirements Scoping & Wireframes (3-5 days)
 - Phase 2: Agile Code Sprint & DB Schemas (10-15 days)
 - Phase 3: QA Vetting, Pen Testing & Delivery
 
-Additional: Legacy Code Maintenance, code migration, security refactoring,
-database indexing audits, continuous support with custom SLAs.
+Additional: Legacy Code Maintenance, code migration, security refactoring
+
+To get IT services: "Go to the Contact page to submit a request, or register for a Client Portal account and submit a Quote Request selecting 'Web SaaS Application' or 'Custom ERP system' as the project category."
 """,
 
     "Sourcing & Integration de profils": """
@@ -142,29 +148,16 @@ database indexing audits, continuous support with custom SLAs.
 SOURCING & INTEGRATION DE PROFILS / IT RECRUITMENT & HR
 --------------------------------------------------------------
 Sectors: IT, Healthcare, High-Tech
-Candidate pool: 450+ experienced developer candidates (active directory)
+Candidate pool: 450+ experienced developers
 
-a) Sourcing (Talent Sourcing)
-   Identify exceptional talents via expertise humaine and outils de
-   recherche avances. Channels:
-   - Reseaux professionnels (LinkedIn, GitHub)
-   - CVtheques internationales
-   - Chasse directe (executive search)
-   - Reseau de partenaires
-   Senior roles: frontend React experts, systems architects, TPMs.
+Services:
+a) Talent Sourcing via LinkedIn, GitHub, CV databases, executive search
+b) Candidate Placement with full assessment pipeline
 
-b) Placement des profils (Candidate Placement)
-   Comprehensive assessment: competences techniques, valeurs, potentiel.
-   Pipeline: presélection, entretiens techniques, coordination
-   candidats-entreprises, negociations contractuelles, suivi d'integration.
+Pre-vetting: Algorithms Check, Reference Vetting, HR Compliance, Whiteboard interviews
+Pipeline: 1. Talent Profiling -> 2. Pre-vetting -> 3. Presentation with reports
 
-Pre-vetting: Algorithms Check, Reference Vetting, HR Compliance,
-architectural whiteboard interviews.
-
-Recruitment pipeline:
-1. Talent Profiling & Job Board Matching
-2. Pre-vetting: whiteboard & code testing
-3. Candidate presentation with full reports
+To get recruitment services: "Go to the Contact page to submit a request, or register for a Client Portal account and submit a Quote Request selecting 'IT Screening & Recruitment' as the project category."
 """,
 }
 

@@ -68,7 +68,7 @@ const create = async (req, res) => {
             }
         }
 
-        res.status(201).json({ message: 'Message created', message: message });
+        res.status(201).json({ message: 'Message created', createdMessage: message });
     } catch (error) {
         res.status(500).json({ message: 'Error creating message', error: error.message });
     }
@@ -82,7 +82,7 @@ const markAsLu = async (req, res) => {
             { returnDocument: 'after' }
         );
         if (!message) return res.status(404).json({ message: 'Message not found' });
-        res.status(200).json({ message: 'Message marked as read', message });
+        res.status(200).json({ message: 'Message marked as read', data: message });
     } catch (error) {
         res.status(500).json({ message: 'Error updating message', error: error.message });
     }

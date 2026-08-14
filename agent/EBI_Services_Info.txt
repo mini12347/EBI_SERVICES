@@ -1,11 +1,11 @@
 ====================================================================
-EBI SERVICES – KNOWLEDGE BASE (English / Français)
-All information from the company website, PowerPoint presentation,
-and client portal.
+EBI SERVICES – FULL WEB APPLICATION KNOWLEDGE BASE
+Complete reference for the AI assistant including all company
+information, web app features, navigation, and user workflows.
 ====================================================================
 
 ====================================
-1. COMPANY OVERVIEW / PRÉSENTATION
+1. COMPANY OVERVIEW
 ====================================
 Name: EBI Services
 Slogan: "Votre Partenaire en Performance et Transformation"
@@ -16,38 +16,28 @@ Status: ISO 27001 Prepared
 
 Core business: EBI Services delivers custom software ecosystems, IT technical
 recruiting pipelines, and scalable back-office tele-services to enterprises
-worldwide. The company provides solutions d'externalisation destinées aux
-entreprises européennes with a focus on relation client, performance
-opérationnelle, and conformité aux standards européens.
+worldwide.
 
-Partner / client logos (homepage): Aura Fintech, Cyberdyne Systems,
-Carrefour France, Innovatech Sourcing, Global Tele-Hub.
+Partner/client logos: Aura Fintech, Cyberdyne Systems, Carrefour France,
+Innovatech Sourcing, Global Tele-Hub.
 
 ====================================
-2. KEY STATISTICS / STATISTIQUES CLÉS
+2. KEY STATISTICS
 ====================================
-- SLA Code Delivery: 98.7% ("Always on schedule")
-- Vetted Engineers: 450+ ("Rigorous tech screening")
-- Global Coverage: 24/7 ("Bilingual operators")
-- Client Revenue Optimized: €15M+ ("Through custom ERPs")
+- SLA Code Delivery: 98.7%
+- Vetted Engineers: 450+
+- Global Coverage: 24/7 bilingual operations
+- Client Revenue Optimized: €15M+
 
 ====================================
-3. CORE BENEFITS / AVANTAGES CLÉS
+3. CORE BENEFITS
 ====================================
-1) Rapid Execution & Integration
-   Agile development team delivers complete custom systems in record time
-   without compromising security.
-
-2) Bank-Grade Technical Audits
-   Every contract, line of code, and administrative tele-support desk
-   undergoes thorough compliance vetting and security audits.
-
-3) Elite Pre-Screened Talent
-   EBI recruitment handles candidate screenings, whiteboard tests, and
-   HR matching dynamically. Skip the hiring noise.
+1) Rapid Execution & Integration - Agile development in record time
+2) Bank-Grade Technical Audits - Compliance vetting and security audits
+3) Elite Pre-Screened Talent - Candidate screenings, whiteboard tests, HR matching
 
 ====================================
-4. SERVICE FAMILIES / GAMME DE SERVICES
+4. SERVICE FAMILIES
 ====================================
 1) Télé-services (Call Center & Tele-Services)
 2) Business Process Outsourcing (BPO)
@@ -55,238 +45,237 @@ Carrefour France, Innovatech Sourcing, Global Tele-Hub.
 4) Sourcing & Intégration de profils (IT Recruitment & HR)
 
 ====================================
-5. DETAILED SERVICES / DÉTAIL DES SERVICES
+5. DETAILED SERVICES
 ====================================
 
---- 5.1 TÉLÉ-SERVICES (CALL CENTER & TELE-SERVICES) ---
-Bilingual: English & French
-Coverage: 24/7 operations, 7 days a week
-
-a) Gestion des appels entrants (Inbound Call Management)
-   Reactif 7j/7 – 24h/24. Services: réponse aux demandes clients,
-   assistance téléphonique, SAV, gestion des réclamations, prise de
-   messages professionnels, support technique.
-
-b) Télévente & prospection B2B / B2C (Outbound Sales)
-   Campagnes de télévente, prospection B2B/B2C, présentation d'offres,
-   qualification de leads, closing des ventes, prise de RDV.
-
-c) Prise de rendez-vous qualifiés (Qualified Appointments)
-   Qualification prospects, prise de RDV, gestion agendas commerciaux,
-   confirmation et relance.
-
-d) Télésecrétariat & gestion d'agendas (Virtual Secretariat)
-   Réception d'appels, gestion d'agendas, prise et transmission de
-   messages, suivi administratif, gestion emails entrants.
-
-e) Enquêtes de satisfaction & fidélisation (Surveys & Retention)
-   Enquêtes satisfaction, analyse retours clients, campagnes de
-   fidélisation, suivi post-vente, reporting.
-
-f) Saisie & Traitement de Données (Data Entry & Processing)
-   Saisie administrative (formulaires, contrats), saisie comptable
-   (devis, factures), mise à jour bases de données, numérisation et
-   archivage, contrôle de conformité. Outils: Excel, CRM, ERP.
-
-g) Création de Trafic & Génération de Leads (Traffic & Lead Gen)
-   Campagnes multicanales: e-mailing, SMS, réseaux sociaux, SEO, SEA.
-   Analyse du trafic et reporting.
+--- 5.1 TELE-SERVICES ---
+Bilingual: English & French, 24/7 coverage
+- Inbound Call Management (7j/7 - 24h/24)
+- Outbound Sales & Prospection B2B/B2C
+- Qualified Appointment Setting
+- Virtual Secretariat & Agenda Management
+- Customer Satisfaction Surveys & Retention
+- Data Entry & Processing (Excel, CRM, ERP)
+- Traffic Creation & Lead Generation (multichannel: email, SMS, social, SEO, SEA)
 
 --- 5.2 BUSINESS PROCESS OUTSOURCING (BPO) ---
-Externalisation des processus métiers pour améliorer l'efficacité
-opérationnelle, réduire les coûts et gagner en agilité.
+- Customer Relations Outsourcing (Call Center & Tele-services)
+- Back-office & Administrative Tasks
+- Data Entry & Processing
+- Order Management & Customer Follow-up
+- Level 1 Technical Support
+- Custom Operational Assistance
 
-Services BPO:
-- Externalisation de la relation client (Call Center & Téléservices)
-- Gestion back-office et tâches administratives
-- Saisie et traitement de données
-- Gestion des commandes et suivi clients
-- Support technique (niveau 1)
-- Assistance opérationnelle sur mesure
-- Conduite de travaux
+--- 5.3 SOLUTIONS IT & DIGITALES ---
+Tech stack: React 19, TypeScript, Tailwind CSS, RESTful APIs, PostgreSQL, SQLite
+Methodology: Agile/Scrum, 3-phase sprints
 
---- 5.3 SOLUTIONS IT & DIGITALES (SOFTWARE DEVELOPMENT) ---
-Technologies: React 19, TypeScript, Tailwind CSS (frontend)
-             RESTful APIs & Webhooks (backend)
-             PostgreSQL & SQLite (databases)
-Methodology: Agile / Scrum, 3-phase sprints
-
-a) Services Managés (Managed IT Services)
-   Gestion proactive des infrastructures: supervision continue,
-   prévention et résolution proactive des incidents, sécurité et
-   disponibilité garanties, réduction des risques.
-
-b) Services Web & Mobile (Web & Mobile Development)
-   Conception et développement de solutions web et mobiles sur mesure,
-   performantes et évolutives. Applications modernes et sécurisées,
-   expérience utilisateur optimisée.
-
-c) Développement & Intégration ERP (ERP Development)
-   Conception et intégration de progiciels ERP adaptés aux besoins
-   métiers. Custom inventory management, barcode/RFID scanners,
-   logistics routing, automated resource planning.
+a) Managed IT Services - Proactive infrastructure management
+b) Web & Mobile Development - Custom solutions on demand
+c) ERP Development & Integration - Custom inventory, barcode/RFID, logistics
 
 Sprint phases:
 - Phase 1: Requirements Scoping & Wireframes (3-5 days)
 - Phase 2: Agile Code Sprint & DB Schemas (10-15 days)
 - Phase 3: QA Vetting, Pen Testing & Delivery
 
-Additional services: Legacy Code Maintenance, comprehensive code migration,
-security refactoring, database indexing audits, continuous support with
-custom SLAs.
+Additional: Legacy Code Maintenance, code migration, security refactoring
 
---- 5.4 SOURCING & INTÉGRATION DE PROFILS (IT RECRUITMENT) ---
-Sectors: IT / Informatique, Healthcare / Santé, High-Tech / Technologies de pointe
-Candidate pool: 450+ experienced developer candidates (active directory)
+--- 5.4 SOURCING & INTEGRATION DE PROFILS ---
+Sectors: IT/Informatique, Healthcare, High-Tech
+Candidate pool: 450+ experienced developers
 
-a) Sourcing (Talent Sourcing)
-   Identify exceptional talents via expertise humaine and outils de recherche
-   avancés. Recruitment channels:
-   - Réseaux professionnels (LinkedIn, GitHub)
-   - CVthèques internationales
-   - Chasse directe (executive search)
-   - Réseau de partenaires
-   Senior roles: frontend React experts, systems architects, technical
-   product managers.
+a) Talent Sourcing via LinkedIn, GitHub, CV databases, executive search
+b) Candidate Placement with full assessment pipeline
 
-b) Placement des profils (Candidate Placement)
-   Comprehensive assessment: compétences techniques, valeurs, potentiel.
-   Pipeline: présélection, entretiens techniques, coordination candidats-
-   entreprises, négociations contractuelles, suivi d'intégration.
-
-Pre-vetting checks:
-- Algorithms Check (coding challenges)
-- Reference Vetting
-- HR Compliance
-- Architectural whiteboard interviews
-
-Recruitment pipeline steps:
-1. Talent Profiling & Job Board Matching
-2. Pre-vetting: whiteboard & code testing
-3. Candidate presentation with full reports
+Pre-vetting: Algorithms Check, Reference Vetting, HR Compliance, Whiteboard interviews
+Pipeline: 1. Talent Profiling -> 2. Pre-vetting -> 3. Presentation with reports
 
 ====================================
-6. WHY CHOOSE EBI / POURQUOI EBI
+6. WHY CHOOSE EBI
 ====================================
-- Expertise globale combinant savoir-faire humain et technologies avancées
-- Approche flexible et personnalisée pour chaque entreprise
-- Solutions intégrées (software + recruitment + support)
-- Rigueur, professionnalisme et orientation résultats
-- ISO 27001 preparedness for security compliance
-- 3 core synchronized departments under one client portal
+- Global expertise combining human know-how and advanced technologies
+- Flexible, personalized approach for each company
+- Integrated solutions (software + recruitment + support)
+- Rigor, professionalism, results-oriented
+- ISO 27001 preparedness
 
-Client testimonials:
-- Yannick Le Gall, VP Operations, Carrefour Logistics:
-  "EBI Services completely revolutionized our logistics workflow. The custom
-  ERP they engineered reduced our dispatch latency by 45%."
-- Elena Petrova, Engineering Director, Cyberdyne Systems:
-  "We hired 6 senior React architects via EBI within a fortnight. Their
-  vetting process is incredibly thorough."
+Testimonials:
+- Yannick Le Gall, VP Operations, Carrefour Logistics: "EBI revolutionized our logistics workflow. Custom ERP reduced dispatch latency by 45%."
+- Elena Petrova, Engineering Director, Cyberdyne Systems: "Hired 6 senior React architects via EBI within a fortnight."
 
 ====================================
-7. CLIENT PORTAL / PORTAIL CLIENT
+7. FAQ
 ====================================
-Features:
-- Dashboard: total request pipelines, issued quotations, scheduled meetings
-- Request Quote: submit scoping requests with industry (Retail, Fintech,
-  Logistics, Healthcare, SaaS), project category (Web SaaS, ERP, IT
-  Screening, Call Center, Back-office), budget range (€5k-€100k+),
-  deadline (1-6 months or Flexible), requirements description, RFP upload
-- Book Consultation: schedule SLA consultation with meeting objective,
-  date, time slot, timezone (Paris, New York, Singapore, UTC)
-- Manager Chat: direct messaging with EBI department heads
-- Document Vault: secure file upload (PDF, Word, Excel, Images, max 10MB)
-- Notifications: real-time portal alerts
+Q: Typical project delivery timeline?
+A: Medium projects: 6-12 weeks. Small modules: 3-4 weeks.
 
-====================================
-8. FAQ (FREQUENTLY ASKED QUESTIONS)
-====================================
-Q1: What is your typical project delivery timeline for custom software?
-A1: Medium-sized web/ERP projects: 6 to 12 weeks from scoping to deployment.
-    Small modules: 3-4 weeks under agile sprint framework.
+Q: How does EBI pre-vet IT candidates?
+A: Three-tiered: (1) Technical CV matching, (2) Live whiteboard challenge, (3) HR & reference check.
 
-Q2: How does EBI pre-vet IT candidates?
-A2: Three-tiered process: (1) Technical CV matching, (2) Live whiteboard
-    programming/architectural challenge, (3) In-depth HR communications and
-    reference check. Comprehensive reports accompany candidate CVs.
+Q: What SLAs for outsourcing/tele-services?
+A: ASA < 90 seconds. Ticket resolution > 97%. Weekly reports.
 
-Q3: What SLAs apply to outsourcing / tele-services?
-A3: Average Speed of Answer (ASA) under 90 seconds. Ticket resolution rate
-    above 97%. Weekly performance metrics compiled and available on portal.
-
-Q4: Can I upgrade/downgrade outsourcing agent packages?
-A4: Yes. Manage active packages, add/remove seats, adjust support coverage
-    hours with 14-day notice via the client portal.
+Q: Can I upgrade/downgrade outsourcing packages?
+A: Yes, with 14-day notice via the client portal.
 
 ====================================
-9. CONTACT INFORMATION / COORDONNÉES
+8. CONTACT INFORMATION
 ====================================
---- From the PowerPoint presentation ---
-Email: contact@ebiservices.net
-Phone: +33 6 95 63 16 12
-Website: www.ebiservices.net
-
---- From the website footer ---
-Phone (header): +32 460 24 17 40
-Phone (footer): +216 56 566 533 / +32 460 24 17 40
-Email: servicesdossiers@gmail.com
-Address (my company): 50 rue d'Algérie, 7000 Bizerte
-Hours: Monday to Friday, 8h30-16h
-
---- From the Contact page ---
 Direct Operations Support: +33 1 74 88 99 00
 Email: contact@ebiservices.com
-Headquarters: 12 Avenue des Champs-Élysées, Paris, France
-GPS: 48.8698° N, 2.3075° E
+Headquarters: 12 Avenue des Champs-Elysees, Paris, France
+GPS: 48.8698 N, 2.3075 E
 Working Hours: 08:30 AM - 06:30 PM (CET), Monday to Friday
 
-Social media: Facebook, Twitter, Instagram, LinkedIn
+====================================
+9. ABOUT / VALUES
+====================================
+1) Security & Compliance - European frameworks, cybersecurity auditing
+2) Agile Delivery Systems - Rapid iteration, live portal tracking
+3) Absolute Professionalism - Bilingual agents, expert engineers
+
+CEO Vision (Jean-Pierre Laurent):
+"To remain the gold standard for corporate operations, software delegation,
+and recruitment outsourcing."
+
+====================================================================
+10. WEB APPLICATION - COMPLETE GUIDE
+====================================================================
+
+The EBI Services platform is a full-stack web application with THREE
+main components:
+- A public website (Home, Services, About, Contact pages)
+- A Client Portal (for registered clients)
+- An Admin CRM Dashboard (for EBI staff)
+
+--- 10.1 PUBLIC PAGES (no login required) ---
+
+HOME PAGE (/):
+- Company presentation with stats and testimonials
+- Buttons: "Schedule Consultation" -> goes to Contact page
+           "Become Portal Client" -> goes to Registration page
+           "Talk with AI" -> opens this chatbot
+           "Explore Our Workflows" -> goes to Services page
+
+SERVICES PAGE (/services):
+Three department tabs with detailed information:
+1. Software Development (React, TypeScript, ERP, Agile sprints)
+2. IT Recruitment & HR (Talent sourcing, vetting pipeline)
+3. Tele-Services & Support (Call center 24/7, back-office)
+- Button: "Book Consultation Meeting" -> goes to Contact page
+- Button: "Submit Quote Request" -> requires login, goes to Portal
+
+ABOUT PAGE (/about):
+- Company overview, core pillars, CEO vision
+
+CONTACT PAGE (/contact):
+- Contact form: Name, Email, Phone, Description of need
+- Submission creates a ticket and sends confirmation email
+- Phone: +33 1 74 88 99 00
+- Address: 12 Avenue des Champs-Elysees, Paris
+- Hours: 08:30 AM - 06:30 PM (CET), Mon-Fri
+- FAQ section with 4 common questions
+
+--- 10.2 REGISTRATION & LOGIN ---
+
+REGISTRATION (/register):
+- Fields: Full Name, Company (optional), Email, Password
+- On success: account created, redirected to login
+- After login: client goes to Client Portal
+
+LOGIN (/login):
+- Fields: Email, Password
+- Admin users -> Admin CRM Dashboard
+- Client users -> Client Portal
+- "Forgot Password?" -> enter email -> receives reset link
+
+PASSWORD RESET (/reset-password):
+- Accessed via email link with token
+- Enter new password (min 6 characters)
+
+--- 10.3 CLIENT PORTAL (requires login as client) ---
+
+The Client Portal has 5 sub-sections:
+
+A) OVERVIEW (Dashboard):
+- Stats: Total Request Pipelines, Issued Quotations, Scheduled Meetings
+- Lists your quotations and notifications
+
+B) QUOTATIONS & REQUESTS:
+- Left panel: "My Scoping Requests" - all your quote requests with statuses
+- Right panel: "Issued Proposals" - formal quotes from EBI with Accept/Reject buttons
+
+Quote workflow:
+1. Click "Request Quote" button (top of portal)
+2. Fill: Industry, Project Category, Budget, Deadline, Requirements, optional RFP file
+3. Submit -> status "new"
+4. EBI reviews -> issues formal quote -> status "quoted"
+5. You see quote with pricing and terms
+6. Click "Accept & Sign SLA" or "Reject Quote"
+
+C) CONSULTATIONS (Appointments):
+- Lists all your appointments with date, time, status
+- "Cancel Appointment" button for pending ones
+
+Booking workflow:
+1. Click "Book Consultation" button (top of portal)
+2. Fill: Meeting Objective, Date, Time Slot (09:00-10:00, 10:00-11:00, etc.), Timezone
+3. Submit -> status "pending"
+4. EBI confirms -> status "confirmed"
+5. You receive notification
+
+D) MANAGER CHAT:
+- Direct messaging with EBI department heads
+- Type and send messages, see conversation history
+
+E) SECURE VAULT (Documents):
+- Drag-and-drop file upload (PDF, Word, Excel, Images, max 10MB)
+- View, download, and delete uploaded documents
+
+--- 10.4 ADMIN CRM DASHBOARD (requires admin login) ---
+
+A) CRM ANALYTICS:
+- Stats: Total Leads, Active Clients, SLA Conversion %, Revenue
+- Charts: Performance over time, Leads by department
+
+B) MANAGE LEADS:
+- Search and filter leads by department/status
+- Update lead status (new -> contacted -> qualified -> lost)
+- Add/edit CRM notes
+- Export leads as CSV
+
+C) QUOTE PROPOSALS:
+- View incoming quote requests from clients
+- Click "Generate Formal Quote" -> enter pricing and terms
+- Issue formal quote -> client gets notified
+
+D) APPOINTMENTS BOARD:
+- View all appointments
+- Confirm or decline pending bookings
+- Add admin notes
+
+E) SYSTEM CONFIGS:
+- Edit website name, chatbot prompt, welcome message, email templates
+
+F) AUDIT LOGS:
+- View all activity logs
 
 ====================================
-10. ABOUT / À PROPOS
+11. WEB APP NAVIGATION QUICK REFERENCE
 ====================================
-Core values:
-1) Security & Compliance - European frameworks, system containment,
-   complete cybersecurity auditing
-2) Agile Delivery Systems - Rapid iteration, live portal tracking of
-   software sprints, recruiting funnels, support latency
-3) Absolute Professionalism - Bilingual call agents, expert systems
-   engineers, pre-vetted via extensive screening
+When guiding users, tell them exactly which page/tab to visit:
 
-Vision (CEO & Founder Jean-Pierre Laurent):
-"To remain the absolute gold standard for corporate operations, software
-delegation, and recruitment outsourcing. We aim to combine high-performance
-software systems with premium human assets, creating absolute operational
-resilience for our clientele."
-
-====================================
-11. CALL TO ACTION / APPEL À L'ACTION
-====================================
-"Votre croissance mérite le meilleur partenaire. Avec EBI Services,
-optimisez votre relation client, vos processus, vos données et
-votre digitalisation. Prenez contact avec nos experts et commencez
-votre transformation dès aujourd'hui !"
-
-====================================
-12. PORTAL ADMIN REFERENCE
-====================================
-User roles: client (portal access), admin (full CRM access)
-Client features: overview, quotations, appointments, manager chat,
-  document vault, consultation booking, quote request
-Admin features: leads management, demandes, devis, documents,
-  notifications, activity logs
-
-Customer support SLA targets:
-- Average Speed of Answer (ASA): < 90 seconds
-- Daily ticket resolution rate: > 97%
-- Full supervisor reporting logs: weekly
-
-Tech stack (website frontend):
-- React 19, TypeScript, Tailwind CSS
-- Vite build tool
-- Node.js / Express backend (port 5001)
-- MongoDB (data storage)
-- Python AI agent (Groq LLM llama-3.3-70b-versatile)
+"I need a quote" -> "Go to the Client Portal and click 'Request Quote'. If you don't have an account yet, register at /register first."
+"I want to book a meeting" -> "Go to the Client Portal and click 'Book Consultation'. You'll need to log in first."
+"I have a question about services" -> "Visit the Services page at /services to see all our departments and offerings."
+"I want to contact you" -> "Visit the Contact page at /contact to fill out our contact form, or call us at +33 1 74 88 99 00."
+"I need to upload a document" -> "Log into the Client Portal and go to the 'Secure Vault' tab to upload files."
+"I want to chat with my manager" -> "Log into the Client Portal and go to the 'Manager Chat' tab."
+"I forgot my password" -> "Go to the Login page and click 'Forgot Password'. You'll receive a reset link by email."
+"How do I register?" -> "Click 'Become Client' in the top navigation, fill in your name, email, and password."
+"I want to see my quotes" -> "Log into the Client Portal and go to 'Quotations & Requests'."
+"I want to cancel an appointment" -> "Log into the Client Portal, go to 'Consultations', and click 'Cancel Appointment'."
 
 ====================================
 END OF DOCUMENT

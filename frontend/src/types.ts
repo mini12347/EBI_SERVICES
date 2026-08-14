@@ -81,7 +81,7 @@ export interface Message {
   conversationId: string;
   senderId: string;
   senderName: string;
-  senderRole: UserRole | "system";
+  senderRole: string;
   text: string;
   timestamp: string;
 }
@@ -94,6 +94,9 @@ export interface Conversation {
   status: "active" | "archived";
   summary?: string;
   lastMessageAt: string;
+  department?: string;
+  repName?: string;
+  repRole?: string;
 }
 
 export interface Notification {

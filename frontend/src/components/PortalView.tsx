@@ -3,6 +3,7 @@ import {
   PlusCircle,
   CalendarDays,
   FileDown,
+  Download,
   MessageSquareCode,
   UploadCloud,
   FileText,
@@ -25,25 +26,30 @@ import {
   Appointment,
 } from "../types";
 import { clientDb } from "../clientDb";
-import { post } from "../api/client";
+import { DEPARTMENTS, GENERAL_REP, getDepartment } from "../departments";
 import {
   apiGetDemandesByClient,
   apiGetDevis,
   apiUpdateDevis,
   apiCreateDemande,
+  apiDownloadQuotePDF,
 } from "../api/quotes";
-import { apiGetDocumentsByClient, apiUploadDocument, apiDeleteDocument } from "../api/documents";
+import { apiGetDocumentsByClient, apiUploadDocument, apiDeleteDocument, apiDownloadDocumentSummaryPDF } from "../api/documents";
 import { apiGetMessagesByClient, apiCreateMessage } from "../api/messages";
 import { apiGetNotificationsByUser, apiMarkNotificationRead, apiMarkAllNotificationsRead } from "../api/notifications";
+import { apiGetMyAppointments, apiGetAvailability, apiCreateAppointment } from "../api/appointments";
 
 interface PortalViewProps {
   currentUser: User;
   token: string;
   pendingBooking?: boolean;
+  pendingAppointments?: boolean;
+  pendingQuotes?: boolean;
+  pendingChatDept?: string | null;
   onBookingOpened?: () => void;
 }
 
-export default function PortalView({ currentUser, token, pendingBooking, onBookingOpened }: PortalViewProps) {
+export default function PortalView({ currentUser, token, pendingBooking, pendingAppointments, pendingQuotes, pendingChatDept, onBookingOpened }: PortalViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<
     "dashboard" | "quotes" | "appointments" | "chat" | "documents"
   >("dashboard");
@@ -51,6 +57,7 @@ export default function PortalView({ currentUser, token, pendingBooking, onBooki
   const [quoteRequests, setQuoteRequests] = useState<QuoteRequest[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [availableSlots, setAvailableSlots] = useState<{ date: string }[]>([]);
   const [documents, setDocuments] = useState<ClientDocument[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -58,7 +65,7 @@ export default function PortalView({ currentUser, token, pendingBooking, onBooki
   const [isBooking, setIsBooking] = useState(false);
   const [aptTitle, setAptTitle] = useState("");
   const [aptDate, setAptDate] = useState("");
-  const [aptSlot, setAptSlot] = useState("09:00 AM - 10:00 AM");
+  const [aptSlot, setAptSlot] = useState("");
   const [aptTimezone, setAptTimezone] = useState("Europe/Paris");
 
   const [isRequestingQuote, setIsRequestingQuote] = useState(false);
@@ -77,6 +84,7 @@ export default function PortalView({ currentUser, token, pendingBooking, onBooki
 
   const [chatMessage, setChatMessage] = useState("");
   const [chatId, setChatId] = useState<string | null>(null);
+  const [chatDept, setChatDept] = useState<string>("general");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -98,6 +106,74 @@ export default function PortalView({ currentUser, token, pendingBooking, onBooki
       if (onBookingOpened) onBookingOpened();
     }
   }, [pendingBooking, onBookingOpened]);
+
+  useEffect(() => {
+    if (pendingAppointments) {
+      setActiveSubTab("appointments");
+      if (onBookingOpened) onBookingOpened();
+    }
+  }, [pendingAppointments, onBookingOpened]);
+
+  useEffect(() => {
+    if (pendingQuotes) {
+      setActiveSubTab("quotes");
+      setIsRequestingQuote(true);
+      if (onBookingOpened) onBookingOpened();
+    }
+  }, [pendingQuotes, onBookingOpened]);
+
+  useEffect(() => {
+    if (pendingChatDept) {
+      setActiveSubTab("chat");
+      setChatDept(pendingChatDept);
+      if (onBookingOpened) onBookingOpened();
+    }
+  }, [pendingChatDept, onBookingOpened]);
+
+  const getOrCreateConversation = (dept: string): string => {
+    const rep = getDepartment(dept);
+    const convs = clientDb.getConversations();
+    const isGeneral = dept === "general";
+    let conv = convs.find(
+      (c) =>
+        c.userId === currentUser.id &&
+        (isGeneral
+          ? !c.department || c.department === "general"
+          : c.department === dept),
+    );
+    if (!conv) {
+      conv = {
+        id: `conv-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        userId: currentUser.id,
+        clientName: currentUser.name,
+        clientEmail: currentUser.email,
+        status: "active",
+        department: dept,
+        repName: rep.repName,
+        repRole: rep.repRole,
+        lastMessageAt: new Date().toISOString(),
+      };
+      convs.push(conv);
+      clientDb.setConversations(convs);
+    }
+    return conv.id;
+  };
+
+  const loadChatForDept = (dept: string) => {
+    try {
+      const id = getOrCreateConversation(dept);
+      setChatId(id);
+      const rMsgs = clientDb
+        .getMessages()
+        .filter((m) => m.conversationId === id);
+      setMessages(rMsgs);
+    } catch { /* ignore */ }
+  };
+
+  useEffect(() => {
+    loadChatForDept(chatDept);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatDept, token]);
 
   const fetchPortalData = async () => {
     let apiUsed = false;
@@ -159,12 +235,45 @@ export default function PortalView({ currentUser, token, pendingBooking, onBooki
       } catch { /* ignore */ }
     }
 
-    // Appointments (clientDb only)
+    // Appointments (API first, clientDb fallback)
     try {
-      const rApts = clientDb
-        .getAppointments()
-        .filter((a) => a.userId === currentUser.id);
-      setAppointments(rApts);
+      const apiApts = await apiGetMyAppointments(currentUser.id);
+      if (apiApts && apiApts.length > 0) {
+        const mapped: Appointment[] = apiApts.map((a: any) => ({
+          id: a._id,
+          userId: a.userId,
+          clientName: a.clientName,
+          clientEmail: a.clientEmail,
+          title: a.title,
+          date: a.date,
+          timeSlot: a.timeSlot,
+          timezone: a.timezone,
+          status: a.status,
+          adminNotes: a.adminNotes,
+          createdAt: a.createdAt,
+        }));
+        setAppointments(mapped);
+      } else {
+        throw new Error("empty");
+      }
+    } catch {
+      try {
+        const rApts = clientDb
+          .getAppointments()
+          .filter((a) => a.userId === currentUser.id);
+        setAppointments(rApts);
+      } catch { /* ignore */ }
+    }
+
+    // Available slots for booking (from shared availability calendar)
+    try {
+      const slots = await apiGetAvailability();
+      if (slots && slots.length > 0) {
+        const future = slots
+          .filter((s) => new Date(s.date) > new Date())
+          .sort((a, b) => a.date.localeCompare(b.date));
+        setAvailableSlots(future);
+      }
     } catch { /* ignore */ }
 
     // Documents via API
@@ -214,21 +323,48 @@ export default function PortalView({ currentUser, token, pendingBooking, onBooki
       } catch { /* ignore */ }
     }
 
-    // Conversations & Messages (clientDb only)
-    try {
-      const convs = clientDb
-        .getConversations()
-        .filter((c) => c.userId === currentUser.id);
-      if (convs.length > 0) {
-        const activeConv = convs[0];
-        setChatId(activeConv.id);
-        const rMsgs = clientDb
-          .getMessages()
-          .filter((m) => m.conversationId === activeConv.id);
-        setMessages(rMsgs);
-      }
-    } catch { /* ignore */ }
+    // Chat handled separately by loadChatForDept (per department conversation)
   };
+
+  function slotLabel(iso: string): string {
+    const d = new Date(iso);
+    const h = d.getHours();
+    const t = d.toLocaleTimeString("fr-FR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    return `${t} - ${String(h + 1).padStart(2, "0")}:00`;
+  }
+
+  const FALLBACK_HOURS = [9, 10, 11, 12, 13, 14, 15, 16, 17];
+
+  function timeOptionsForDate(date: string): { value: string; label: string }[] {
+    const existing = availableSlots
+      .filter((s) => s.date.startsWith(date))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (existing.length > 0) {
+      return existing.map((s) => ({ value: s.date, label: slotLabel(s.date) }));
+    }
+    return FALLBACK_HOURS.map((h) => ({
+      value: `${date}T${String(h).padStart(2, "0")}:00:00`,
+      label: `${String(h).padStart(2, "0")}:00 - ${String(h + 1).padStart(2, "0")}:00`,
+    }));
+  }
+
+  function groupSlotsByDate(slots: { date: string }[], maxDays = 7) {
+    const groups: { date: string; times: string[] }[] = [];
+    for (const s of slots) {
+      const day = s.date.slice(0, 10);
+      const last = groups[groups.length - 1];
+      if (last && last.date === day) {
+        last.times.push(s.date);
+      } else {
+        if (groups.length >= maxDays) break;
+        groups.push({ date: day, times: [s.date] });
+      }
+    }
+    return groups;
+  }
 
   function mapStatut(s: string): QuoteRequest["status"] {
     const map: Record<string, QuoteRequest["status"]> = {
@@ -332,6 +468,11 @@ export default function PortalView({ currentUser, token, pendingBooking, onBooki
     e.preventDefault();
     if (!aptTitle || !aptDate) return;
 
+    const opts = timeOptionsForDate(aptDate);
+    const chosen = opts.find((o) => o.value === aptSlot) || opts[0];
+    const timeSlot = chosen?.label || "";
+    const slotDate = chosen?.value || "";
+
     try {
       // Save to localStorage
       const apts = clientDb.getAppointments();
@@ -342,7 +483,7 @@ export default function PortalView({ currentUser, token, pendingBooking, onBooki
         clientEmail: currentUser.email,
         title: aptTitle,
         date: aptDate,
-        timeSlot: aptSlot,
+        timeSlot,
         timezone: aptTimezone,
         status: "pending",
         createdAt: new Date().toISOString(),
@@ -353,7 +494,7 @@ export default function PortalView({ currentUser, token, pendingBooking, onBooki
       clientDb.addNotification(
         "usr-admin",
         "Consultation Requested",
-        `${currentUser.name} requested an appointment: "${aptTitle}" on ${aptDate} at ${aptSlot}.`,
+        `${currentUser.name} requested an appointment: "${aptTitle}" on ${aptDate} at ${timeSlot}.`,
       );
       clientDb.addActivityLog(
         currentUser.id,
@@ -361,16 +502,17 @@ export default function PortalView({ currentUser, token, pendingBooking, onBooki
         `Requested consultation: "${aptTitle}"`,
       );
 
-      // Save to backend API (sends confirmation email)
+      // Save to backend API (sends confirmation email + blocks the slot)
       try {
-        await post("/appointments", {
+        await apiCreateAppointment({
           userId: currentUser.id,
           clientName: currentUser.name,
           clientEmail: currentUser.email,
           title: aptTitle,
           date: aptDate,
-          timeSlot: aptSlot,
+          timeSlot,
           timezone: aptTimezone,
+          slotDate,
         });
       } catch {
         // Backend unavailable — email not sent, but local booking works
@@ -379,6 +521,7 @@ export default function PortalView({ currentUser, token, pendingBooking, onBooki
       setIsBooking(false);
       setAptTitle("");
       setAptDate("");
+      setAptSlot("");
       fetchPortalData();
     } catch (err) {
       console.error(err);
@@ -568,7 +711,7 @@ export default function PortalView({ currentUser, token, pendingBooking, onBooki
       );
 
       setChatMessage("");
-      fetchPortalData();
+      loadChatForDept(chatDept);
     } catch (err) {
       console.error(err);
     }
@@ -595,6 +738,21 @@ export default function PortalView({ currentUser, token, pendingBooking, onBooki
       console.error(err);
     }
   };
+
+  const handleDownloadDocumentPDF = async (id: string) => {
+    try {
+      await apiDownloadDocumentSummaryPDF(id);
+    } catch (err) {
+      console.error(err);
+      alert("Could not generate the PDF for this file.");
+    }
+  };
+
+  const aptTimeOptions = aptDate ? timeOptionsForDate(aptDate) : [];
+  const effectiveAptSlot =
+    aptSlot && aptTimeOptions.some((o) => o.value === aptSlot)
+      ? aptSlot
+      : aptTimeOptions[0]?.value || "";
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-8">
@@ -636,7 +794,7 @@ export default function PortalView({ currentUser, token, pendingBooking, onBooki
           {[
             { id: "dashboard", label: "Overview" },
             { id: "quotes", label: "Quotations & Requests" },
-            { id: "appointments", label: "Consultations" },
+            { id: "appointments", label: "Appointments History" },
             { id: "chat", label: "Manager Chat" },
             { id: "documents", label: "Secure Vault" },
           ].map((sub) => (
@@ -939,13 +1097,18 @@ export default function PortalView({ currentUser, token, pendingBooking, onBooki
                           {q.projectName}
                         </h4>
                       </div>
-                      <a
-                        href={`/api/files/download/EBI_Quote_Q-${q.id.split("-")[1]}.txt`}
+                      <button
+                        onClick={() => {
+                          apiDownloadQuotePDF(q.id).catch((err) => {
+                            console.error(err);
+                            alert("Could not download the quote PDF.");
+                          });
+                        }}
                         className="p-1.5 bg-white border border-gray-200 rounded text-gray-500 hover:text-blue-900 shadow-sm transition"
-                        title="Download Proposal Document"
+                        title="Download Quote PDF"
                       >
                         <FileDown className="h-4 w-4" />
-                      </a>
+                      </button>
                     </div>
 
                     <div className="border-t border-dashed border-gray-200 pt-2 text-[11px] space-y-1 text-gray-600">
@@ -1005,79 +1168,150 @@ export default function PortalView({ currentUser, token, pendingBooking, onBooki
       {}
       {}
       {activeSubTab === "appointments" && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-4">
-          <h3 className="font-display text-sm font-bold text-slate-950 border-b border-gray-100 pb-3 text-left">
-            Consultation Schedules
-          </h3>
-
-          {appointments.length === 0 ? (
-            <div className="text-center py-12 text-gray-400 text-xs">
-              No meetings scheduled. Use "Book Consultation" above to secure a
-              slot on our calendars!
+        <div className="space-y-6">
+          {}
+          <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3 text-left">
+              <div>
+                <h3 className="font-display text-sm font-bold text-slate-950">
+                  Available Slots
+                </h3>
+                <span className="text-[10px] text-gray-400">
+                  Pick a date and time slot to book your consultation.
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  setAptDate("");
+                  setAptSlot("");
+                  setIsBooking(true);
+                }}
+                className="rounded-lg bg-blue-900 hover:bg-blue-950 text-white px-3.5 py-2 text-xs font-semibold shadow flex items-center gap-1.5 cursor-pointer"
+              >
+                <CalendarDays className="h-4 w-4" />
+                <span>Book Consultation</span>
+              </button>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {appointments.map((a) => (
-                <div
-                  key={a.id}
-                  className="rounded-xl border border-gray-150 p-4 text-left space-y-2"
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
+
+            {availableSlots.length === 0 ? (
+              <div className="text-center py-8 text-gray-400 text-xs">
+                No available slots right now. Please come back later or contact
+                our team directly.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {groupSlotsByDate(availableSlots).map((group) => (
+                  <div
+                    key={group.date}
+                    className="rounded-xl border border-gray-150 p-3 text-left flex flex-wrap items-center justify-between gap-3"
+                  >
+                    <div className="min-w-[150px]">
                       <span className="block text-xs font-bold text-slate-900">
-                        {a.title}
+                        {new Date(`${group.date}T12:00:00`).toLocaleDateString(
+                          "en-GB",
+                          { weekday: "long", day: "numeric", month: "long" },
+                        )}
                       </span>
-                      <span className="block text-[10px] text-gray-500">
-                        {a.date} at {a.timeSlot} ({a.timezone})
+                      <span className="block text-[10px] text-gray-400">
+                        {group.date}
                       </span>
                     </div>
-                    <span
-                      className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded ${
-                        a.status === "confirmed"
-                          ? "bg-green-100 text-green-700"
-                          : a.status === "pending"
-                            ? "bg-blue-100 text-blue-700"
-                            : a.status === "cancelled"
-                              ? "bg-red-100 text-red-700"
-                              : "bg-gray-100 text-gray-700"
-                      }`}
-                    >
-                      {a.status}
-                    </span>
+                    <div className="flex flex-wrap gap-1.5 justify-end">
+                      {group.times.map((iso) => (
+                        <button
+                          key={iso}
+                          onClick={() => {
+                            setAptDate(group.date);
+                            setAptSlot(iso);
+                            setIsBooking(true);
+                          }}
+                          className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[10px] font-bold text-blue-900 hover:bg-blue-900 hover:text-white transition cursor-pointer"
+                        >
+                          {slotLabel(iso)}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  {a.adminNotes && (
-                    <p className="text-[10px] text-gray-500 leading-relaxed bg-slate-50 p-2 rounded">
-                      <span className="font-bold text-slate-900 block">
-                        Manager Notes:
+                ))}
+              </div>
+            )}
+          </div>
+
+          {}
+          <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-4">
+            <h3 className="font-display text-sm font-bold text-slate-950 border-b border-gray-100 pb-3 text-left">
+              Appointments History
+            </h3>
+
+            {appointments.length === 0 ? (
+              <div className="text-center py-12 text-gray-400 text-xs">
+                No meetings scheduled yet. Pick an available slot above to book
+                your first consultation!
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {appointments.map((a) => (
+                  <div
+                    key={a.id}
+                    className="rounded-xl border border-gray-150 p-4 text-left space-y-2"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <span className="block text-xs font-bold text-slate-900">
+                          {a.title}
+                        </span>
+                        <span className="block text-[10px] text-gray-500">
+                          {a.date} at {a.timeSlot} ({a.timezone})
+                        </span>
+                      </div>
+                      <span
+                        className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded ${
+                          a.status === "confirmed"
+                            ? "bg-green-100 text-green-700"
+                            : a.status === "pending"
+                              ? "bg-blue-100 text-blue-700"
+                              : a.status === "cancelled"
+                                ? "bg-red-100 text-red-700"
+                                : "bg-gray-100 text-gray-700"
+                        }`}
+                      >
+                        {a.status}
                       </span>
-                      {a.adminNotes}
-                    </p>
-                  )}
-                  {a.status === "pending" && (
-                    <button
-                      onClick={() => {
-                        const aptsList = clientDb.getAppointments();
-                        const found = aptsList.find((ap) => ap.id === a.id);
-                        if (found) {
-                          found.status = "cancelled";
-                          clientDb.setAppointments(aptsList);
-                          clientDb.addActivityLog(
-                            currentUser.id,
-                            currentUser.name,
-                            `Cancelled appointment: "${a.title}"`,
-                          );
-                        }
-                        fetchPortalData();
-                      }}
-                      className="text-[10px] text-red-600 font-bold hover:underline"
-                    >
-                      Cancel Appointment
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+                    </div>
+                    {a.adminNotes && (
+                      <p className="text-[10px] text-gray-500 leading-relaxed bg-slate-50 p-2 rounded">
+                        <span className="font-bold text-slate-900 block">
+                          Manager Notes:
+                        </span>
+                        {a.adminNotes}
+                      </p>
+                    )}
+                    {a.status === "pending" && (
+                      <button
+                        onClick={() => {
+                          const aptsList = clientDb.getAppointments();
+                          const found = aptsList.find((ap) => ap.id === a.id);
+                          if (found) {
+                            found.status = "cancelled";
+                            clientDb.setAppointments(aptsList);
+                            clientDb.addActivityLog(
+                              currentUser.id,
+                              currentUser.name,
+                              `Cancelled appointment: "${a.title}"`,
+                            );
+                          }
+                          fetchPortalData();
+                        }}
+                        className="text-[10px] text-red-600 font-bold hover:underline"
+                      >
+                        Cancel Appointment
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1096,7 +1330,80 @@ export default function PortalView({ currentUser, token, pendingBooking, onBooki
             </span>
           </div>
 
-          <div className="h-80 overflow-y-auto bg-slate-50 border border-gray-150 rounded-xl p-4 space-y-4">
+          {}
+          <div>
+            <span className="block text-[9px] font-bold uppercase text-gray-400 mb-2 text-left">
+              Select a department representative
+            </span>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setChatDept(GENERAL_REP.key)}
+                className={`rounded-xl border px-3 py-2 text-left transition cursor-pointer ${
+                  chatDept === GENERAL_REP.key
+                    ? "border-blue-900 bg-blue-900 text-white"
+                    : "border-gray-200 bg-white hover:border-blue-300"
+                }`}
+              >
+                <span
+                  className={`block text-[10px] font-bold ${
+                    chatDept === GENERAL_REP.key ? "text-white" : "text-slate-900"
+                  }`}
+                >
+                  {GENERAL_REP.name}
+                </span>
+                <span
+                  className={`block text-[9px] ${
+                    chatDept === GENERAL_REP.key ? "text-blue-200" : "text-gray-400"
+                  }`}
+                >
+                  {GENERAL_REP.repRole}
+                </span>
+              </button>
+              {DEPARTMENTS.map((d) => (
+                <button
+                  key={d.key}
+                  onClick={() => setChatDept(d.key)}
+                  className={`rounded-xl border px-3 py-2 text-left transition cursor-pointer ${
+                    chatDept === d.key
+                      ? "border-blue-900 bg-blue-900 text-white"
+                      : "border-gray-200 bg-white hover:border-blue-300"
+                  }`}
+                >
+                  <span
+                    className={`block text-[10px] font-bold ${
+                      chatDept === d.key ? "text-white" : "text-slate-900"
+                    }`}
+                  >
+                    {d.name}
+                  </span>
+                  <span
+                    className={`block text-[9px] ${
+                      chatDept === d.key ? "text-blue-200" : "text-gray-400"
+                    }`}
+                  >
+                    {d.repRole}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {}
+          <div className="rounded-xl bg-slate-50 border border-gray-150 px-3 py-2 text-left">
+            <span className="block text-[10px] font-bold text-slate-900">
+              {getDepartment(chatDept).repName}
+            </span>
+            <span className="block text-[9px] text-gray-500">
+              {getDepartment(chatDept).repRole} — {getDepartment(chatDept).name}
+            </span>
+          </div>
+
+          <div className="h-72 overflow-y-auto bg-slate-50 border border-gray-150 rounded-xl p-4 space-y-4">
+            {messages.length === 0 && (
+              <div className="text-center text-[10px] text-gray-400 py-8">
+                Start the conversation with your representative below.
+              </div>
+            )}
             {messages.map((m) => (
               <div
                 key={m.id}
@@ -1113,7 +1420,7 @@ export default function PortalView({ currentUser, token, pendingBooking, onBooki
                       : "bg-blue-950"
                   }`}
                 >
-                  {m.senderId === currentUser.id ? "Me" : "M"}
+                  {m.senderId === currentUser.id ? "Me" : "R"}
                 </div>
                 <div
                   className={`max-w-[70%] rounded-xl px-3 py-2 text-xs shadow-sm ${
@@ -1237,12 +1544,19 @@ export default function PortalView({ currentUser, token, pendingBooking, onBooki
                       </div>
                     </div>
                     <div className="flex gap-2">
+                      <button
+                        onClick={() => handleDownloadDocumentPDF(doc.id)}
+                        className="p-1.5 bg-gray-50 border border-gray-200 hover:text-blue-900 rounded shadow-sm text-gray-500 transition"
+                        title="Download PDF summary"
+                      >
+                        <FileDown className="h-4 w-4" />
+                      </button>
                       <a
                         href={doc.url}
                         className="p-1.5 bg-gray-50 border border-gray-200 hover:text-blue-900 rounded shadow-sm text-gray-500 transition"
                         title="Download file"
                       >
-                        <FileDown className="h-4 w-4" />
+                        <Download className="h-4 w-4" />
                       </a>
                       <button
                         onClick={() => handleDeleteDocument(doc.id)}
@@ -1446,18 +1760,23 @@ export default function PortalView({ currentUser, token, pendingBooking, onBooki
                 <label className="block text-[9px] font-bold uppercase text-gray-500 mb-1">
                   Time Slot selection
                 </label>
-                <select
-                  value={aptSlot}
-                  onChange={(e) => setAptSlot(e.target.value)}
-                  className="w-full rounded border border-gray-200 bg-white p-2 text-xs focus:ring-1 focus:ring-blue-900 focus:outline-none"
-                >
-                  <option>09:00 AM - 10:00 AM</option>
-                  <option>10:00 AM - 11:00 AM</option>
-                  <option>11:30 AM - 12:30 PM</option>
-                  <option>02:00 PM - 03:00 PM</option>
-                  <option>03:30 PM - 04:30 PM</option>
-                  <option>05:00 PM - 06:00 PM</option>
-                </select>
+                {aptDate ? (
+                  <select
+                    value={effectiveAptSlot}
+                    onChange={(e) => setAptSlot(e.target.value)}
+                    className="w-full rounded border border-gray-200 bg-white p-2 text-xs focus:ring-1 focus:ring-blue-900 focus:outline-none"
+                  >
+                    {aptTimeOptions.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="block text-[10px] text-gray-400 border border-dashed border-gray-200 rounded p-2">
+                    Select a date above to see the available time slots.
+                  </span>
+                )}
               </div>
 
               <div>

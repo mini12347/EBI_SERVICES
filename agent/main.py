@@ -1,16 +1,21 @@
 import sys
 import re
 import inspect
+import json
+import os
+import tempfile
 from general_questions_responder import generate_response
-from department_handler import classify_intent
+from department_handler import classify_intent, resolve_department_key, resolve_department_name
 from department_contexts import build_context
 from rdv_manager import RDVManager
 
 rdv_manager = RDVManager()
 
+STATE_FILE = os.path.join(tempfile.gettempdir(), "ebi_agent_state.json")
+
 RDV_KEYWORDS = [
     "rdv", "rendez-vous", "rendez vous", "planifier", "programmer",
-    "réserver", "reserver", "annuler", "créneau", "creneau",
+    "reserver", "re server", "annuler", "creneau", "creneau",
     "disponible", "prendre rdv", "calendrier", "agenda",
     "mes rdv", "mes rendez-vous",
     "appointment", "appointments", "book", "booking", "schedule",
@@ -19,22 +24,44 @@ RDV_KEYWORDS = [
 ]
 
 FORM_KEYWORDS = [
-    "formulaire", "inscription", "contact", "souscrire",
-    "je veux être contacté", "me contacter", "m'inscrire",
-    "devis", "demande de devis", "soumettre",
-    "form", "sign up", "signup", "subscribe", "contact me",
-    "get in touch", "quote", "request a quote", "submit",
+    "formulaire de contact", "remplir le formulaire", "soumettre le formulaire",
+    "je veux etre contacte", "me contacter", "contactez-moi",
+    "contact form", "fill out the form", "submit the form",
+    "contact me", "get in touch", "reach out",
 ]
 
 GENERAL_INFO_KEYWORDS = [
     "heure", "heures", "horaire", "horaires", "ouvert", "ouverte",
-    "ouverture", "ferme", "fermé", "fermeture", "à partir de quelle heure",
-    "quand êtes-vous ouvert", "adresse", "où êtes-vous", "où se trouve",
-    "localisation", "emplacement", "numéro de téléphone", "téléphone",
+    "ouverture", "ferme", "ferme", "fermeture", "a partir de quelle heure",
+    "quand etes-vous ouvert", "adresse", "ou etes-vous", "ou se trouve",
+    "localisation", "emplacement", "numero de telephone", "telephone",
     "email", "courriel", "site web",
     "hour", "hours", "opening", "open", "close", "closed", "closing",
     "what time", "when are you open", "address", "where are you",
     "location", "phone number", "phone", "website",
+]
+
+APP_NAVIGATION_KEYWORDS = [
+    "comment faire", "comment puis-je", "comment", "ou puis-je", "ou trouver",
+    "how do i", "how can i", "how to", "where can i", "where do i",
+    "register", "signup", "sign up", "login", "log in", "sign in",
+    "inscription", "connexion", "se connecter", "s'inscrire",
+    "request quote", "ask for quote", "get quote", "demande de devis",
+    "demande un devis", "obtenir un devis",
+    "book consultation", "schedule meeting", "prendre rendez-vous",
+    "reserver consultation", "planifier meeting",
+    "upload document", "upload file", "telecharger document",
+    "televerser", "envoyer document", "vault", "coffre-fort",
+    "chat with manager", "message manager", "parler au manager",
+    "envoyer message", "contacter manager",
+    "cancel appointment", "annuler rendez-vous",
+    "see my quotes", "voir mes devis", "voir mes demandes",
+    "forgot password", "reset password", "mot de passe oublie",
+    "reinitialiser mot de passe",
+    "client portal", "portail client", "portal", "portail",
+    "admin", "dashboard", "tableau de bord",
+    "what can i do", "what features", "what can you do",
+    "que puis-je faire", "que peux-tu faire", "fonctionnalites",
 ]
 
 ENGLISH_HINTS = [
@@ -43,20 +70,44 @@ ENGLISH_HINTS = [
 ]
 
 FRENCH_HINTS = [
-    "le", "la", "les", "je", "veux", "vous", "êtes", "quand", "où",
-    "comment", "bonjour", "svp", "s'il", "rendez", "société",
+    "le", "la", "les", "je", "veux", "vous", "etes", "quand", "ou",
+    "comment", "bonjour", "svp", "s'il", "rendez", "societe",
 ]
 
 RDV_ACTION_KEYWORDS = {
-    "schedule": ("planifier", "programmer", "prendre", "réserver", "reserver", "rdv", "book", "schedule"),
     "cancel": ("annuler", "supprimer", "cancel"),
-    "list": ("liste", "mes rdv", "mes rendez", "my appointment", "consulter"),
-    "dispo": ("disponible", "créneau", "creneau", "available", "availability", "slot"),
+    "list": ("liste", "mes rdv", "mes rendez", "my appointment", "consulter", "voir mes"),
+    "dispo": ("disponible", "disponibilité", "disponibilités", "créneau", "créneaux", "creneau", "creneaux", "available", "availability", "slot"),
+    "schedule": ("planifier", "programmer", "prendre", "réserver", "reserver", "re server", "rdv", "rendez-vous", "rendez vous", "book", "schedule", "appointment"),
 }
 
-NO_DATE_MARKERS = {
-    "fr": "Je n'ai pas pu reconnaître une date valide",
-    "en": "I could not recognize a valid date",
+BOOKING_CONFIRM = {
+    "fr": (
+        "### Rendez-vous\n\n"
+        "Souhaitez-vous **prendre un rendez-vous** avec notre équipe ?\n"
+        "*(Répondez oui ou non, ou indiquez directement la date et l'heure souhaitées)*"
+    ),
+    "en": (
+        "### Appointment\n\n"
+        "Would you like to **book an appointment** with our team ?\n"
+        "*(Answer yes or no, or directly provide your preferred date and time)*"
+    ),
+}
+
+RDV_PROMPTS = {
+    "schedule": {
+        "fr": "Bien sûr ! À quelle date et heure souhaitez-vous votre rendez-vous ?\n*(Ex : 15/03/2025 à 14h30)*",
+        "en": "Sure! When would you like your appointment ?\n*(e.g. 15/03/2025 at 2:30pm)*",
+    },
+    "cancel": {
+        "fr": "D'accord. Quel rendez-vous souhaitez-vous annuler ?\n*(Précisez la date, ex : 15/03/2025 à 14h30)*",
+        "en": "OK. Which appointment would you like to cancel ?\n*(Provide the date, e.g. 15/03/2025 at 2:30pm)*",
+    },
+}
+
+RDV_CANCELLED = {
+    "fr": "Très bien, j'annule la demande de rendez-vous. N'hésitez pas à revenir vers moi si besoin !",
+    "en": "Alright, I cancelled the appointment request. Feel free to come back if you need anything !",
 }
 
 ASK_REDIRECT_THRESHOLD = 0.8
@@ -70,9 +121,9 @@ MESSAGES = {
             "Veuillez remplir vos informations :\n"
             "- Nom\n"
             "- Email\n"
-            "- Téléphone\n"
+            "- Telephone\n"
             "- Votre besoin\n\n"
-            "Notre équipe vous recontactera rapidement."
+            "Notre equite vous recontactera rapidement."
         ),
         "ask_redirect": (
             "### Département détecté\n\n"
@@ -87,9 +138,11 @@ MESSAGES = {
             "J'ai remarqué que votre question concerne le département suivant :\n"
             "**{intent}**\n\n"
             "Je vous redirige vers ce département "
-            "pour une assistance plus spécialisée."
+            "pour une assistance plus spécialisée.\n\n"
+            "Je vous mets en relation avec le représentant du département **{intent}** "
+            "dans la messagerie de votre espace client."
         ),
-        "error": "### Une erreur est survenue\n\nJe suis désolé, une erreur est survenue lors du traitement de votre demande.\n\nVeuillez réessayer ou contacter notre équipe par formulaire.\n\n`Erreur: {error}`",
+        "error": "### Une erreur est survenue\n\nDesole, une erreur est survenue lors du traitement de votre demande.\n\nVeuillez reessayer ou contacter notre equipe par formulaire.\n\n`Erreur: {error}`",
     },
     "en": {
         "form_redirect": (
@@ -115,7 +168,9 @@ MESSAGES = {
             "I noticed your question concerns the following department :\n"
             "**{intent}**\n\n"
             "Redirecting you to that department "
-            "for more specialized help."
+            "for more specialized help.\n\n"
+            "I'm connecting you with the **{intent}** representative "
+            "in your client portal's chat."
         ),
         "error": "### An error occurred\n\nSorry, an error occurred while processing your request.\n\nPlease try again or contact our team through the form.\n\n`Error: {error}`",
     },
@@ -147,6 +202,10 @@ def is_form_query(query: str) -> bool:
 
 def is_general_info_query(query: str) -> bool:
     return contains_keyword(query, GENERAL_INFO_KEYWORDS)
+
+
+def is_app_navigation_query(query: str) -> bool:
+    return contains_keyword(query, APP_NAVIGATION_KEYWORDS)
 
 
 def detect_language(query: str) -> str:
@@ -198,34 +257,71 @@ def call_rdv_method(method_name: str, query: str, lang: str) -> str:
     return method(query)
 
 
-conversation_state = {"pending_rdv_action": None}
+def load_conversation_state() -> dict:
+    try:
+        if os.path.exists(STATE_FILE):
+            with open(STATE_FILE, 'r', encoding='utf-8') as f:
+                state = json.load(f)
+                if 'timestamp' in state:
+                    import time
+                    if time.time() - state['timestamp'] > 1800:
+                        return {"pending_rdv_action": None}
+                return state
+    except Exception:
+        pass
+    return {"pending_rdv_action": None}
+
+def save_conversation_state(state: dict):
+    try:
+        import time
+        state['timestamp'] = time.time()
+        with open(STATE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(state, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+conversation_state = load_conversation_state()
+
+
+def _rdv_prompt(action: str, lang: str) -> str:
+    return RDV_PROMPTS.get(action, RDV_PROMPTS["schedule"])[lang]
 
 
 def handle_rdv_query(query: str, lang: str) -> str:
     pending = conversation_state.get("pending_rdv_action")
-    marker = NO_DATE_MARKERS.get(lang, NO_DATE_MARKERS["en"])
 
     if pending:
-        if _supports_lang_param(rdv_manager.extract_date_time):
-            date_time = rdv_manager.extract_date_time(query, lang=lang)
-        else:
-            date_time = rdv_manager.extract_date_time(query)
+        if is_negation(query, lang):
+            conversation_state["pending_rdv_action"] = None
+            save_conversation_state(conversation_state)
+            return RDV_CANCELLED.get(lang, RDV_CANCELLED["en"])
 
-        if date_time is None:
+        date_time = rdv_manager.extract_date_time(query)
+        if date_time is not None:
+            conversation_state["pending_rdv_action"] = None
+            save_conversation_state(conversation_state)
+            if pending == "schedule":
+                return call_rdv_method("schedule_rdv", query, lang)
+            if pending == "cancel":
+                return call_rdv_method("cancel_rdv", query, lang)
             return call_rdv_method("manage_rdvs", query, lang)
 
-        conversation_state["pending_rdv_action"] = None
-        if pending == "schedule":
-            return call_rdv_method("schedule_rdv", query, lang)
-        elif pending == "cancel":
-            return call_rdv_method("cancel_rdv", query, lang)
-        else:
-            return call_rdv_method("manage_rdvs", query, lang)
+        new_action = detect_rdv_action(query)
+        if new_action:
+            if new_action != pending:
+                conversation_state["pending_rdv_action"] = new_action
+                save_conversation_state(conversation_state)
+            return _rdv_prompt(new_action, lang)
+        if not is_rdv_query(query):
+            conversation_state["pending_rdv_action"] = None
+            save_conversation_state(conversation_state)
+            return None
+        return _rdv_prompt(pending, lang)
 
-    response = call_rdv_method("manage_rdvs", query, lang)
-    if marker in response or NO_DATE_MARKERS["fr"] in response or NO_DATE_MARKERS["en"] in response:
-        conversation_state["pending_rdv_action"] = detect_rdv_action(query) or "schedule"
-    return response
+    action = detect_rdv_action(query)
+
+    return call_rdv_method("manage_rdvs", query, lang)
 
 
 NEGATION_WORDS = {
@@ -247,54 +343,65 @@ def process_query(query: str, lang: str = None) -> str:
 
     try:
         if is_rdv_query(query) and not is_negation(query, lang):
-            return (
-                "### Rendez-vous\n\n"
-                "Souhaitez-vous **prendre un rendez-vous** avec notre équipe ?\n"
-                "*(Répondez oui ou non)*"
-            ) if lang == "fr" else (
-                "### Appointment\n\n"
-                "Would you like to **book an appointment** with our team ?\n"
-                "*(Answer yes or no)*"
-            )
+            if conversation_state.get("pending_rdv_action"):
+                return handle_rdv_query(query, lang)
+
+            action = detect_rdv_action(query)
+            if action in ("list", "dispo", "cancel"):
+                return handle_rdv_query(query, lang)
+
+            conversation_state["pending_rdv_action"] = "schedule"
+            if rdv_manager.extract_date_time(query) is not None:
+                conversation_state["pending_rdv_action"] = None
+                save_conversation_state(conversation_state)
+                return call_rdv_method("schedule_rdv", query, lang)
+            save_conversation_state(conversation_state)
+            return BOOKING_CONFIRM.get(lang, BOOKING_CONFIRM["en"])
 
         if conversation_state.get("pending_rdv_action"):
-            return handle_rdv_query(query, lang)
+            result = handle_rdv_query(query, lang)
+            if result is not None:
+                return result
+            # pending RDV flow abandoned — continue with normal handling
 
         if is_form_query(query) and not is_negation(query, lang):
             return msgs["form_redirect"]
 
         if is_general_info_query(query):
-            context = build_context({"intent": "Aucun département approprié", "confiance": 0.0})
+            context = build_context({"intent": "Aucun departement approprie", "confiance": 0.0})
+            return call_generate_response(query, context, lang)
+
+        if is_app_navigation_query(query) and not is_negation(query, lang):
+            context = build_context({"intent": "Aucun departement approprie", "confiance": 0.0})
             return call_generate_response(query, context, lang)
 
         intent = classify_intent(query, lang=lang) or {}
-        confiance = intent.get("confiance", 0) or 0
-        intent_name = intent.get("intent", "")
+        confiance = intent.get("confiance", 0) or intent.get("confidence", 0) or 0
+        raw_name = intent.get("intent", "")
 
-        no_dept_fr = "Aucun département approprié"
-        no_dept_en = "No matching department"
+        context_key = resolve_department_key(raw_name)
+        if context_key:
+            intent["intent_fr"] = context_key
+
+        intent_name = resolve_department_name(raw_name, lang) or ""
 
         context = build_context(intent)
         response = call_generate_response(query, context, lang)
 
-        # If user says no/non to a redirect offer, always respond with knowledge
         if is_negation(query, lang):
             return response
 
-        # No department match or low confidence: answer directly (no redirect)
-        if intent_name in (no_dept_fr, no_dept_en) or confiance <= 0:
+        if not intent_name or confiance <= 0:
             return response
 
-        # Medium confidence: answer based on context but still offer redirect
         if confiance < ASK_REDIRECT_THRESHOLD:
             return response
 
-        # High but not certain: ask before redirecting
         if confiance < AUTO_REDIRECT_THRESHOLD:
             return response + "\n\n" + msgs["ask_redirect"].format(intent=intent_name)
 
-        # Very high confidence: auto-redirect
-        return msgs["auto_redirect"].format(intent=intent_name)
+        auto_redirect = msgs["auto_redirect"].format(intent=intent_name)
+        return response + "\n\n---\n\n" + auto_redirect
 
     except Exception as e:
         return msgs["error"].format(error=str(e))

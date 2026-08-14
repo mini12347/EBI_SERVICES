@@ -38,6 +38,8 @@ const DEFAULT_USERS: User[] = [
   },
 ];
 
+// Default passwords are stored separately for demo/offline mode only.
+// In production, passwords are hashed and stored in the database.
 const DEFAULT_PASSWORDS: Record<string, string> = {
   "admin@ebi.com": "admin123",
   "yosrbejaoui42@gmail.com": "client123",

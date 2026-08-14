@@ -1,5 +1,11 @@
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
+
+const uploadDir = path.join(__dirname, '..', 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
 
 // Set storage engine
 const storage = multer.diskStorage({
@@ -14,16 +20,16 @@ const storage = multer.diskStorage({
 // Check file type
 function checkFileType(file, cb) {
     // Allowed ext
-    const filetypes = /pdf/;
+    const filetypes = /pdf|doc|docx|xls|xlsx|png|jpg|jpeg|gif|txt|csv/;
     // Check ext
     const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
     // Check mime
-    const mimetype = filetypes.test(file.mimetype);
+    const mimetype = /application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument|image\/|text\/|application\/csv/.test(file.mimetype);
 
     if (mimetype && extname) {
         return cb(null, true);
     } else {
-        cb(new Error('Error: PDFs Only!'));
+        cb(new Error('Error: Only PDF, Word, Excel, images, and text files are allowed!'));
     }
 }
 

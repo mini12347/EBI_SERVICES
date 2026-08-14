@@ -2,6 +2,9 @@ const express = require('express');
 const router = express.Router();
 const controller = require('../controllers/deviController');
 const upload = require('../config/multerConfig');
+const authMiddleware = require('../middleware/authMiddleware');
+
+router.use(authMiddleware);
 
 router.get('/', controller.getAll);
 router.get('/:id', controller.getById);

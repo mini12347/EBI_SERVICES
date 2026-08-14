@@ -23,6 +23,7 @@ router.get('/demandes/:id/historique', demandeController.getHistorique);
 // --- DOCUMENTS ---
 router.get('/demandes/:id/documents', documentController.getMesDocuments);
 router.post('/demandes/:id/documents', upload.single('document'), documentController.uploadDocument);
+router.post('/documents', upload.single('document'), documentController.uploadGeneralDocument);
 
 // --- DEVIS ---
 router.get('/devis/:id/download', demandeController.downloadDevis);

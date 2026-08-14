@@ -17,7 +17,7 @@ async function request<T>(
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   };
-  if (token) {
+  if (token && token.length > 10) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
@@ -40,7 +40,7 @@ export async function uploadFile(
 ): Promise<any> {
   const token = localStorage.getItem('ebi_api_token');
   const headers: Record<string, string> = {};
-  if (token) {
+  if (token && token.length > 10) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 

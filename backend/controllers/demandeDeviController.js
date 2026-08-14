@@ -66,9 +66,14 @@ const create = async (req, res) => {
 
 const update = async (req, res) => {
     try {
+        const allowedFields = ['statut', 'besoin'];
+        const updates = {};
+        for (const key of allowedFields) {
+            if (req.body[key] !== undefined) updates[key] = req.body[key];
+        }
         const demande = await DemandeDevis.findByIdAndUpdate(
             req.params.id,
-            { $set: req.body },
+            { $set: updates },
             { returnDocument: 'after', runValidators: true }
         );
         if (!demande) return res.status(404).json({ message: 'Demande not found' });
