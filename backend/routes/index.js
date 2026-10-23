@@ -20,6 +20,7 @@ router.use('/tokens', require('./tokenRoutes'));
 router.use('/form-responses', require('./formResponseRoutes'));
 router.use('/appointments', require('./appointmentRoutes'));
 router.use('/leads', require('./leadRoutes'));
+router.use('/services', require('./serviceRoutes'));
 router.use('/agent', require('./agentRoutes'));
 
 module.exports = router;

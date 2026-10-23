@@ -28,16 +28,18 @@ import {
 import { clientDb } from "../clientDb";
 import { DEPARTMENTS, GENERAL_REP, getDepartment } from "../departments";
 import {
+  ApiDemandeDevis,
   apiGetDemandesByClient,
   apiGetDevis,
   apiUpdateDevis,
   apiCreateDemande,
   apiDownloadQuotePDF,
 } from "../api/quotes";
-import { apiGetDocumentsByClient, apiUploadDocument, apiDeleteDocument, apiDownloadDocumentSummaryPDF } from "../api/documents";
+import { apiGetDocumentsByClient, apiUploadDocument, apiDeleteDocument, apiDownloadDocument, apiDownloadDocumentSummaryPDF } from "../api/documents";
 import { apiGetMessagesByClient, apiCreateMessage } from "../api/messages";
 import { apiGetNotificationsByUser, apiMarkNotificationRead, apiMarkAllNotificationsRead } from "../api/notifications";
 import { apiGetMyAppointments, apiGetAvailability, apiCreateAppointment } from "../api/appointments";
+import { apiGetServices, type ApiService } from "../api/services";
 
 interface PortalViewProps {
   currentUser: User;
@@ -49,6 +51,14 @@ interface PortalViewProps {
   onBookingOpened?: () => void;
 }
 
+const DEMO_SERVICES: ApiService[] = [
+  { code: "demo-web-saas", nom: "Web SaaS Application", description: "", departement: "development" },
+  { code: "demo-erp", nom: "Custom ERP system", description: "", departement: "development" },
+  { code: "demo-recruitment", nom: "IT Screening & Recruitment", description: "", departement: "recruitment" },
+  { code: "demo-call-center", nom: "Bilingual Call Center Outsource", description: "", departement: "tele-services" },
+  { code: "demo-back-office", nom: "Back-office Admin Support", description: "", departement: "tele-services" },
+];
+
 export default function PortalView({ currentUser, token, pendingBooking, pendingAppointments, pendingQuotes, pendingChatDept, onBookingOpened }: PortalViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<
     "dashboard" | "quotes" | "appointments" | "chat" | "documents"
@@ -59,6 +69,7 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [availableSlots, setAvailableSlots] = useState<{ date: string }[]>([]);
   const [documents, setDocuments] = useState<ClientDocument[]>([]);
+  const [documentRequestId, setDocumentRequestId] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
 
@@ -69,8 +80,12 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
   const [aptTimezone, setAptTimezone] = useState("Europe/Paris");
 
   const [isRequestingQuote, setIsRequestingQuote] = useState(false);
+  const [availableServices, setAvailableServices] = useState<ApiService[]>([]);
+  const [isLoadingServices, setIsLoadingServices] = useState(true);
+  const [servicesError, setServicesError] = useState("");
+  const [isSubmittingQuoteRequest, setIsSubmittingQuoteRequest] = useState(false);
   const [quoteIndustry, setQuoteIndustry] = useState("Retail & E-commerce");
-  const [quoteType, setQuoteType] = useState("Web SaaS Application");
+  const [quoteType, setQuoteType] = useState("");
   const [quoteBudget, setQuoteBudget] = useState("€10,000 - €25,000");
   const [quoteDeadline, setQuoteDeadline] = useState("3 Months");
   const [quoteRequirements, setQuoteRequirements] = useState("");
@@ -83,6 +98,8 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
   const [uploadProgressMsg, setUploadProgressMsg] = useState("");
 
   const [chatMessage, setChatMessage] = useState("");
+  const [chatFeedback, setChatFeedback] = useState("");
+  const [isSendingChatMessage, setIsSendingChatMessage] = useState(false);
   const [chatId, setChatId] = useState<string | null>(null);
   const [chatDept, setChatDept] = useState<string>("general");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -92,6 +109,33 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
     const interval = setInterval(fetchPortalData, 10000);
     return () => clearInterval(interval);
   }, [token]);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiGetServices()
+      .then((services) => {
+        if (cancelled) return;
+        setAvailableServices(services);
+        setQuoteType(services[0]?.code || "");
+        setServicesError(services.length ? "" : "No services are currently available.");
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.error("Could not load services for the quote request form.", error);
+        if (localStorage.getItem("ebi_auth_mode") === "api") {
+          setServicesError("Services could not be loaded. Please try again later.");
+        } else {
+          setAvailableServices(DEMO_SERVICES);
+          setQuoteType(DEMO_SERVICES[0].code);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingServices(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -159,80 +203,120 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
     return conv.id;
   };
 
-  const loadChatForDept = (dept: string) => {
+  const loadChatForDept = async (dept: string) => {
+    const id = localStorage.getItem("ebi_auth_mode") === "api"
+      ? `${currentUser.id}:${dept}`
+      : getOrCreateConversation(dept);
+    setChatId(id);
+    if (localStorage.getItem("ebi_auth_mode") === "api") {
+      try {
+        const apiMessages = await apiGetMessagesByClient(currentUser.id, dept);
+        setMessages(apiMessages.map((message) => ({
+          id: message._id,
+          conversationId: id,
+          senderId: typeof message.expediteur === "object" && message.expediteur
+            ? message.expediteur._id
+            : typeof message.expediteur === "string" ? message.expediteur : "",
+          senderName: typeof message.expediteur === "object" && message.expediteur
+            ? message.expediteur.fullname
+            : "EBI Services",
+          senderRole: typeof message.expediteur === "object" && message.expediteur
+            ? message.expediteur.role
+            : "admin",
+          text: message.contenu,
+          timestamp: message.createdAt,
+        })));
+        setChatFeedback("");
+      } catch (error) {
+        console.error("Could not load your message history.", error);
+        setChatFeedback(error instanceof Error ? error.message : "Impossible de charger l’historique.");
+      }
+      return;
+    }
     try {
-      const id = getOrCreateConversation(dept);
-      setChatId(id);
       const rMsgs = clientDb
         .getMessages()
         .filter((m) => m.conversationId === id);
       setMessages(rMsgs);
-    } catch { /* ignore */ }
+    } catch (error) {
+      console.error("Could not load the demo message history.", error);
+    }
   };
 
   useEffect(() => {
     loadChatForDept(chatDept);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const interval = setInterval(() => loadChatForDept(chatDept), 10000);
+    return () => clearInterval(interval);
   }, [chatDept, token]);
 
   const fetchPortalData = async () => {
-    let apiUsed = false;
-    // Try API first for demandes
-    try {
-      const demandes = await apiGetDemandesByClient(currentUser.id);
-      if (demandes && demandes.length > 0) {
-        const mapped: QuoteRequest[] = demandes.map((d: any) => ({
+    const isApiSession = localStorage.getItem("ebi_auth_mode") === "api";
+    let apiDemandes: ApiDemandeDevis[] = [];
+    if (isApiSession) {
+      try {
+        apiDemandes = await apiGetDemandesByClient(currentUser.id);
+        setQuoteRequests(apiDemandes.map((d) => ({
           id: d._id,
-          userId: typeof d.client === 'object' ? d.client._id : d.client,
+          userId: d.client && typeof d.client === 'object' ? d.client._id : currentUser.id,
           clientName: currentUser.name,
           company: currentUser.companyId || '',
-          industry: typeof d.service === 'object' ? d.service.nom || '' : '',
-          projectType: typeof d.service === 'object' ? d.service.nom || '' : '',
-          budget: '',
-          deadline: '',
+          industry: d.secteur || '',
+          projectType: d.service && typeof d.service === 'object' ? d.service.nom || '' : '',
+          budget: d.budget || '',
+          deadline: d.delai || '',
           requirements: d.besoin,
           status: mapStatut(d.statut),
           createdAt: d.createdAt,
-        }));
-        setQuoteRequests(mapped);
-        apiUsed = true;
+        })));
+      } catch (error) {
+        console.error("Could not load client requests from the API.", error);
+        setQuoteRequests([]);
       }
-    } catch { /* fallback */ }
-
-    if (!apiUsed) {
+    } else {
       try {
         const rReqs = clientDb
           .getQuoteRequests()
           .filter((q) => q.userId === currentUser.id);
         setQuoteRequests(rReqs);
-      } catch { /* ignore */ }
+      } catch (error) {
+        console.error("Could not load demo quote requests.", error);
+      }
     }
 
-    // Quotes via API
-    try {
-      const devisList = await apiGetDevis();
-      if (devisList && devisList.length > 0) {
-        const mapped: Quote[] = devisList.map((d: any) => ({
+    if (isApiSession) {
+      try {
+        const devisList = await apiGetDevis();
+        const requestIds = new Set(apiDemandes.map((demande) => demande._id));
+        const serviceNames = new Map(apiDemandes.map((demande) => [
+          demande._id,
+          demande.service && typeof demande.service === 'object' ? demande.service.nom : '',
+        ]));
+        setQuotes(devisList
+          .filter((d) => requestIds.has(typeof d.demande === 'object' ? d.demande._id : d.demande))
+          .map((d) => ({
           id: d._id,
           quoteRequestId: typeof d.demande === 'object' ? d.demande._id : d.demande,
           clientName: currentUser.name,
-          projectName: `Quote ${d._id.slice(-6)}`,
+          projectName: serviceNames.get(typeof d.demande === 'object' ? d.demande._id : d.demande) || `Quote ${d._id.slice(-6)}`,
           amount: d.montant,
-          terms: '',
+          terms: d.terms || '',
           expiryDate: '',
           status: mapDevisStatut(d.statut),
           createdAt: d.createdAt,
-        }));
-        mapDevisToQuoteRequests(mapped);
-        setQuotes(mapped);
+        })));
+      } catch (error) {
+        console.error("Could not load client quotes from the API.", error);
+        setQuotes([]);
       }
-    } catch {
+    } else {
       try {
         const rQuotes = clientDb
           .getQuotes()
           .filter((q) => q.clientName === currentUser.name);
         setQuotes(rQuotes);
-      } catch { /* ignore */ }
+      } catch (error) {
+        console.error("Could not load demo quotes.", error);
+      }
     }
 
     // Appointments (API first, clientDb fallback)
@@ -276,28 +360,33 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
       }
     } catch { /* ignore */ }
 
-    // Documents via API
-    try {
-      const docs = await apiGetDocumentsByClient(currentUser.id);
-      if (docs && docs.length > 0) {
-        const mapped: ClientDocument[] = docs.map((d: any) => ({
+    if (isApiSession) {
+      try {
+        const docs = await apiGetDocumentsByClient(currentUser.id);
+        setDocuments(docs.map((d) => ({
           id: d._id,
           userId: currentUser.id,
           name: d.nom_fichier,
           type: d.type_mime || 'application/octet-stream',
           size: d.taille ? `${(d.taille / 1024).toFixed(0)} KB` : 'Unknown',
-          url: d.lien || '#',
+          url: '',
           createdAt: d.createdAt,
-        }));
-        setDocuments(mapped);
+          origin: d.origine === 'admin' ? 'admin' : 'client',
+          requestName: d.demande && typeof d.demande === 'object' ? d.demande.besoin : undefined,
+        })));
+      } catch (error) {
+        console.error("Could not load client documents from the API.", error);
+        setDocuments([]);
       }
-    } catch {
+    } else {
       try {
         const rDocs = clientDb
           .getDocuments()
           .filter((d) => d.userId === currentUser.id);
         setDocuments(rDocs);
-      } catch { /* ignore */ }
+      } catch (error) {
+        console.error("Could not load demo documents.", error);
+      }
     }
 
     // Notifications via API
@@ -382,48 +471,33 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
       envoye: "sent",
       telecharge: "sent",
       archive: "rejected",
+      accepte: "accepted",
+      refuse: "rejected",
     };
     return map[s] || "sent";
   }
 
-  function mapDevisToQuoteRequests(devisList: Quote[]) {
-    const reqs = clientDb.getQuoteRequests();
-    let changed = false;
-    devisList.forEach((d) => {
-      const req = reqs.find((r) => r.id === d.quoteRequestId);
-      if (req && req.status === "in_review") {
-        req.status = "quoted";
-        changed = true;
-      }
-    });
-    if (changed) clientDb.setQuoteRequests(reqs);
-  }
-
   const handleQuoteRequestSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!quoteType || !quoteRequirements) return;
+    if (!quoteType || !quoteRequirements.trim() || isSubmittingQuoteRequest) return;
 
-    let apiCreated = false;
+    setIsSubmittingQuoteRequest(true);
+    const selectedService = availableServices.find((service) => service.code === quoteType);
     try {
-      const result = await apiCreateDemande({
-        client: currentUser.id,
-        service: "000000000000000000000000", // placeholder, backend requires ObjectId
-        besoin: `${quoteType}: ${quoteRequirements}`,
-      });
-      if (result && result.demande) {
+      if (localStorage.getItem("ebi_auth_mode") === "api") {
+        await apiCreateDemande({
+          service: quoteType,
+          secteur: quoteIndustry,
+          budget: quoteBudget,
+          delai: quoteDeadline,
+          besoin: quoteRequirements.trim(),
+        });
         clientDb.addActivityLog(
           currentUser.id,
           currentUser.name,
           `Created scoping request via API: ${quoteType}`,
         );
-        apiCreated = true;
-      }
-    } catch {
-      // fallback to clientDb
-    }
-
-    if (!apiCreated) {
-      try {
+      } else {
         const reqs = clientDb.getQuoteRequests();
         const newReq: QuoteRequest = {
           id: `qr-${Math.random().toString(36).substring(2, 11)}`,
@@ -431,10 +505,10 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
           clientName: currentUser.name,
           company: currentUser.companyId || "Individual",
           industry: quoteIndustry,
-          projectType: quoteType,
+          projectType: selectedService?.nom || quoteType,
           budget: quoteBudget,
           deadline: quoteDeadline,
-          requirements: quoteRequirements,
+          requirements: quoteRequirements.trim(),
           attachmentName: uploadedFile?.name || "",
           attachmentUrl: uploadedFile ? "#" : undefined,
           status: "new",
@@ -451,17 +525,19 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
         clientDb.addActivityLog(
           currentUser.id,
           currentUser.name,
-          `Created scoping request: ${quoteType}`,
+          `Created scoping request: ${selectedService?.nom || quoteType}`,
         );
-      } catch (err) {
-        console.error(err);
       }
+      setIsRequestingQuote(false);
+      setQuoteRequirements("");
+      setUploadedFile(null);
+      fetchPortalData();
+    } catch (error) {
+      console.error("Could not submit quote request.", error);
+      alert(error instanceof Error ? error.message : "Could not submit your quote request.");
+    } finally {
+      setIsSubmittingQuoteRequest(false);
     }
-
-    setIsRequestingQuote(false);
-    setQuoteRequirements("");
-    setUploadedFile(null);
-    fetchPortalData();
   };
 
   const handleAppointmentBooking = async (e: React.FormEvent) => {
@@ -533,10 +609,18 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
     status: "accepted" | "rejected",
   ) => {
     const backendStatus = status === "accepted" ? "accepte" : "refuse";
-    try {
-      await apiUpdateDevis(quoteId, { statut: backendStatus } as any);
-    } catch {
-      // fallback to clientDb
+    if (localStorage.getItem("ebi_auth_mode") === "api") {
+      try {
+        await apiUpdateDevis(quoteId, { statut: backendStatus });
+        setQuotes((existing) =>
+          existing.map((quote) => quote.id === quoteId ? { ...quote, status } : quote),
+        );
+        fetchPortalData();
+      } catch (error) {
+        console.error("Could not update quote status.", error);
+        alert(error instanceof Error ? error.message : "Could not update the quote status.");
+      }
+      return;
     }
 
     try {
@@ -576,14 +660,16 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
     if (!file) return;
     setUploadProgressMsg("Uploading...");
 
-    try {
-      await apiUploadDocument("", file); // demandeId optional
-      setUploadProgressMsg("Upload Completed!");
-      setTimeout(() => setUploadProgressMsg(""), 2000);
-      fetchPortalData();
+    if (localStorage.getItem("ebi_auth_mode") === "api") {
+      try {
+        await apiUploadDocument(documentRequestId, file);
+        setUploadProgressMsg("Document envoyé avec succès.");
+        await fetchPortalData();
+      } catch (error) {
+        console.error("Could not upload client document.", error);
+        setUploadProgressMsg(error instanceof Error ? error.message : "Échec de l'envoi du document.");
+      }
       return;
-    } catch {
-      // fallback to clientDb
     }
 
     const reader = new FileReader();
@@ -616,8 +702,7 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
           `Uploaded document "${file.name}" to Vault`,
         );
 
-        setUploadProgressMsg("Upload Completed!");
-        setTimeout(() => setUploadProgressMsg(""), 2000);
+        setUploadProgressMsg("Document enregistré dans cet appareil.");
         fetchPortalData();
       } catch (err) {
         console.error(err);
@@ -669,20 +754,19 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
   };
 
   const handleSendChatMessage = async () => {
-    if (!chatMessage.trim() || !chatId) return;
+    const contenu = chatMessage.trim();
+    if (!contenu || !chatId || isSendingChatMessage) return;
+    setIsSendingChatMessage(true);
+    setChatFeedback("");
 
     try {
-      await apiCreateMessage({
-        client: currentUser.id,
-        expediteur: currentUser.id,
-        contenu: chatMessage,
-        client_email: currentUser.email,
-      });
-    } catch {
-      // fallback to clientDb
-    }
+      if (localStorage.getItem("ebi_auth_mode") === "api") {
+        await apiCreateMessage({ client: currentUser.id, contenu, departement: chatDept });
+        setChatMessage("");
+        await loadChatForDept(chatDept);
+        return;
+      }
 
-    try {
       const msgs = clientDb.getMessages();
       const newMsg: Message = {
         id: `msg-${Date.now()}`,
@@ -690,7 +774,7 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
         senderId: currentUser.id,
         senderName: currentUser.name,
         senderRole: currentUser.role,
-        text: chatMessage,
+        text: contenu,
         timestamp: new Date().toISOString(),
       };
       msgs.push(newMsg);
@@ -700,28 +784,36 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
       const conv = convs.find((c) => c.id === chatId);
       if (conv) {
         conv.lastMessageAt = new Date().toISOString();
-        conv.summary = `Last message: ${chatMessage.substring(0, 40)}...`;
+        conv.summary = `Last message: ${contenu.substring(0, 40)}...`;
         clientDb.setConversations(convs);
       }
 
       clientDb.addNotification(
         "usr-admin",
         "New Portal Message",
-        `New portal message from ${currentUser.name}: "${chatMessage.substring(0, 50)}"`,
+        `New portal message from ${currentUser.name}: "${contenu.substring(0, 50)}"`,
       );
 
       setChatMessage("");
-      loadChatForDept(chatDept);
+      await loadChatForDept(chatDept);
     } catch (err) {
-      console.error(err);
+      console.error("Could not send your message.", err);
+      setChatFeedback(err instanceof Error ? err.message : "Échec de l’envoi du message.");
+    } finally {
+      setIsSendingChatMessage(false);
     }
   };
 
   const handleDeleteDocument = async (id: string) => {
-    try {
-      await apiDeleteDocument(id);
-    } catch {
-      // fallback to clientDb
+    if (localStorage.getItem("ebi_auth_mode") === "api") {
+      try {
+        await apiDeleteDocument(id);
+        await fetchPortalData();
+      } catch (error) {
+        console.error("Could not delete client document.", error);
+        setUploadProgressMsg(error instanceof Error ? error.message : "Échec de la suppression.");
+      }
+      return;
     }
     try {
       const docsList = clientDb.getDocuments();
@@ -745,6 +837,15 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
     } catch (err) {
       console.error(err);
       alert("Could not generate the PDF for this file.");
+    }
+  };
+
+  const handleDownloadDocument = async (id: string, filename: string) => {
+    try {
+      await apiDownloadDocument(id, filename);
+    } catch (error) {
+      console.error("Could not download client document.", error);
+      setUploadProgressMsg(error instanceof Error ? error.message : "Échec du téléchargement.");
     }
   };
 
@@ -1433,6 +1534,9 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
                     {m.senderName}
                   </span>
                   {m.text}
+                  <time className="mt-1 block text-[8px] opacity-60">
+                    {new Date(m.timestamp).toLocaleString("fr-FR")}
+                  </time>
                 </div>
               </div>
             ))}
@@ -1443,6 +1547,7 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
             <input
               type="text"
               placeholder="Send message to our staff..."
+              maxLength={5000}
               value={chatMessage}
               onChange={(e) => setChatMessage(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSendChatMessage()}
@@ -1450,12 +1555,13 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
             />
             <button
               onClick={handleSendChatMessage}
-              disabled={!chatMessage.trim()}
+              disabled={!chatMessage.trim() || isSendingChatMessage}
               className="h-8 w-8 rounded-xl bg-blue-900 text-white flex items-center justify-center hover:bg-blue-950 transition disabled:opacity-45 cursor-pointer"
             >
-              <Send className="h-3.5 w-3.5" />
+              {isSendingChatMessage ? <Clock className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
             </button>
           </div>
+          {chatFeedback && <p role="status" className="text-left text-xs text-red-700">{chatFeedback}</p>}
         </div>
       )}
 
@@ -1484,11 +1590,29 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
               <span className="text-[10px] text-gray-400">
                 PDF, Word, Excel, Images (max 10MB)
               </span>
+              {localStorage.getItem("ebi_auth_mode") === "api" && quoteRequests.length > 0 && (
+                <label className="mt-2 flex flex-col items-start gap-1 text-[10px] font-semibold text-gray-600">
+                  Associer à une demande (facultatif)
+                  <select
+                    value={documentRequestId}
+                    onChange={(e) => setDocumentRequestId(e.target.value)}
+                    className="min-w-64 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs"
+                  >
+                    <option value="">Document général</option>
+                    {quoteRequests.map((request) => (
+                      <option key={request.id} value={request.id}>
+                        {request.projectType} — {request.requirements.slice(0, 45)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
 
               <div className="relative">
                 <input
                   type="file"
                   id="vault-file-picker"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.txt,.csv"
                   onChange={handleFileInputChange}
                   className="hidden"
                 />
@@ -1504,7 +1628,7 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
               </div>
 
               {uploadProgressMsg && (
-                <span className="block text-[11px] font-bold text-blue-900 pt-1">
+                <span className="block max-w-md text-[11px] font-bold text-blue-900 pt-1">
                   {uploadProgressMsg}
                 </span>
               )}
@@ -1538,9 +1662,10 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
                           {doc.name}
                         </span>
                         <span className="block text-[9px] text-gray-400">
-                          {doc.size} •{" "}
-                          {new Date(doc.createdAt).toLocaleDateString()}
+                          {doc.size} • {new Date(doc.createdAt).toLocaleDateString()}
+                          {doc.origin && ` • ${doc.origin === "admin" ? "Envoyé par EBI Services" : "Envoyé par vous"}`}
                         </span>
+                        {doc.requestName && <span className="block text-[9px] text-gray-500">{doc.requestName}</span>}
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -1551,13 +1676,13 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
                       >
                         <FileDown className="h-4 w-4" />
                       </button>
-                      <a
-                        href={doc.url}
+                      <button
+                        onClick={() => handleDownloadDocument(doc.id, doc.name)}
                         className="p-1.5 bg-gray-50 border border-gray-200 hover:text-blue-900 rounded shadow-sm text-gray-500 transition"
-                        title="Download file"
+                        title="Télécharger le document"
                       >
                         <Download className="h-4 w-4" />
-                      </a>
+                      </button>
                       <button
                         onClick={() => handleDeleteDocument(doc.id)}
                         className="p-1.5 bg-gray-50 border border-gray-200 hover:text-red-600 rounded shadow-sm text-gray-500 transition"
@@ -1616,14 +1741,23 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
                     value={quoteType}
                     onChange={(e) => setQuoteType(e.target.value)}
                     className="w-full rounded border border-gray-200 bg-white p-2 text-xs focus:ring-1 focus:ring-blue-900 focus:outline-none"
+                    required
                   >
-                    <option>Web SaaS Application</option>
-                    <option>Custom ERP system</option>
-                    <option>IT Screening & Recruitment</option>
-                    <option>Bilingual Call Center Outsource</option>
-                    <option>Back-office Admin Support</option>
+                    <option value="" disabled>
+                      {isLoadingServices ? "Loading services..." : servicesError || "Select a service"}
+                    </option>
+                    {availableServices.map((service) => (
+                      <option key={service.code} value={service.code}>
+                        {service.nom}
+                      </option>
+                    ))}
                   </select>
                 </div>
+                {servicesError && (
+                  <span className="col-span-2 block text-[10px] text-red-700" role="alert">
+                    {servicesError}
+                  </span>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1694,9 +1828,10 @@ export default function PortalView({ currentUser, token, pendingBooking, pending
               <div className="pt-2 flex gap-2">
                 <button
                   type="submit"
+                  disabled={isSubmittingQuoteRequest || isLoadingServices || !quoteType || !!servicesError}
                   className="flex-1 bg-blue-900 hover:bg-blue-950 text-white rounded-lg py-2.5 text-xs font-semibold shadow transition cursor-pointer"
                 >
-                  Submit Quote Request
+                  {isSubmittingQuoteRequest ? "Submitting..." : "Submit Quote Request"}
                 </button>
                 <button
                   type="button"

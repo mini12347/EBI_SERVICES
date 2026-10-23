@@ -49,7 +49,7 @@ export default function App() {
   useEffect(() => {
     const savedUserId = localStorage.getItem("ebi_session_token");
     if (savedUserId) {
-      loadSession(savedUserId);
+      loadSession(savedUserId, localStorage.getItem("ebi_auth_mode"));
     }
   }, []);
 
@@ -61,7 +61,18 @@ export default function App() {
     }
   }, [token]);
 
-  const loadSession = async (sessionToken: string) => {
+  const loadSession = async (sessionToken: string, authMode: string | null) => {
+    if (authMode === "demo") {
+      const found = clientDb.getUsers().find((user) => user.id === sessionToken);
+      if (found) {
+        setCurrentUser(found);
+        setToken(sessionToken);
+        return;
+      }
+      handleLogout();
+      return;
+    }
+
     try {
       const me = await apiGetMe();
       if (me && me._id) {
@@ -76,25 +87,13 @@ export default function App() {
         setCurrentUser(mappedUser);
         setToken(me._id);
         localStorage.setItem("ebi_session_token", me._id);
+        localStorage.setItem("ebi_auth_mode", "api");
         return;
       }
     } catch {
-      // Backend unavailable, fall back to clientDb
+      // Invalid or expired API sessions must sign in again.
     }
-    try {
-      const users = clientDb.getUsers();
-      const found = users.find((u) => u.id === sessionToken);
-      if (found) {
-        setCurrentUser(found);
-        setToken(sessionToken);
-        localStorage.setItem("ebi_session_token", sessionToken);
-        localStorage.removeItem("ebi_api_token");
-      } else {
-        handleLogout();
-      }
-    } catch (e) {
-      console.error(e);
-    }
+    handleLogout();
   };
 
   const fetchNotifications = async () => {
@@ -124,11 +123,19 @@ export default function App() {
     }
   };
 
-  const handleLogin = (user: User, jwtToken: string) => {
+  const handleLogin = (user: User, jwtToken: string, refreshToken?: string) => {
     setCurrentUser(user);
     setToken(user.id);
     localStorage.setItem("ebi_session_token", user.id);
-    localStorage.setItem("ebi_api_token", jwtToken);
+    if (jwtToken) {
+      localStorage.setItem("ebi_api_token", jwtToken);
+      if (refreshToken) localStorage.setItem("ebi_refresh_token", refreshToken);
+      localStorage.setItem("ebi_auth_mode", "api");
+    } else {
+      localStorage.removeItem("ebi_api_token");
+      localStorage.removeItem("ebi_refresh_token");
+      localStorage.setItem("ebi_auth_mode", "demo");
+    }
     if (user.role === "admin") {
       setActiveTab("admin");
     } else {
@@ -142,8 +149,16 @@ export default function App() {
     setNotifications([]);
     localStorage.removeItem("ebi_session_token");
     localStorage.removeItem("ebi_api_token");
+    localStorage.removeItem("ebi_refresh_token");
+    localStorage.removeItem("ebi_auth_mode");
     setActiveTab("home");
   };
+
+  useEffect(() => {
+    const handleExpiredSession = () => handleLogout();
+    window.addEventListener("ebi:session-expired", handleExpiredSession);
+    return () => window.removeEventListener("ebi:session-expired", handleExpiredSession);
+  }, []);
 
   const triggerChatOpen = () => {
     const launcher = document.querySelector(".fixed.bottom-6.right-6.z-50 button") as HTMLButtonElement;

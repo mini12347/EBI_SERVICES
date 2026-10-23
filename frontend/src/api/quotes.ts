@@ -1,11 +1,15 @@
-import { get, post, put } from './client';
+import { apiFetch, get, post, put } from './client';
 
 export interface ApiDemandeDevis {
   _id: string;
-  client: string | { _id: string; fullname: string; email: string };
-  service: string | { _id: string; nom: string; description?: string };
-  manager?: string | { _id: string; fullname: string };
+  client: string | { _id: string; fullname: string; email: string; entreprise?: string } | null;
+  service: string | { _id: string; nom: string; description?: string } | null;
+  manager?: string | { _id: string; fullname: string } | null;
+  archivedAt?: string | null;
   besoin: string;
+  secteur?: string;
+  budget?: string;
+  delai?: string;
   statut: string;
   notes?: any[];
   createdAt: string;
@@ -16,6 +20,7 @@ export interface ApiDevis {
   demande: string | { _id: string; besoin: string };
   fichier_pdf?: string;
   montant: number;
+  terms?: string;
   statut: string;
   createdAt: string;
 }
@@ -29,9 +34,11 @@ export async function apiGetDemandesByClient(clientId: string) {
 }
 
 export async function apiCreateDemande(body: {
-  client: string;
   service: string;
   besoin: string;
+  secteur: string;
+  budget: string;
+  delai: string;
 }) {
   return post<{ message: string; demande: ApiDemandeDevis }>(
     '/demandes',
@@ -41,7 +48,7 @@ export async function apiCreateDemande(body: {
 
 export async function apiUpdateDemande(
   id: string,
-  body: Partial<ApiDemandeDevis>,
+  body: Partial<ApiDemandeDevis> & { manager?: string | null; archive?: boolean },
 ) {
   return put<{ message: string; demande: ApiDemandeDevis }>(
     `/demandes/${id}`,
@@ -60,6 +67,7 @@ export async function apiGetDevisByDemande(demandeId: string) {
 export async function apiCreateDevis(body: {
   demande: string;
   montant: number;
+  terms?: string;
 }) {
   return post<{ message: string; devis: ApiDevis }>('/devis', body);
 }
@@ -74,7 +82,7 @@ export async function apiDownloadQuotePDF(id: string): Promise<void> {
   if (token && token.length > 10) {
     headers['Authorization'] = `Bearer ${token}`;
   }
-  const res = await fetch(`/api/devis/${id}/download`, { headers });
+  const res = await apiFetch(`/devis/${id}/download`, { headers });
   if (!res.ok) {
     throw new Error('Failed to download quote PDF');
   }

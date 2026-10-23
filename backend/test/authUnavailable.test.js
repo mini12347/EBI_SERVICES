@@ -27,10 +27,12 @@ const { login } = require('../controllers/authController');
 
   await login(req, res);
 
-  assert.strictEqual(statusCode, 200, 'fallback login should succeed when the database is offline');
-  assert.ok(payload && payload.access_token, 'fallback login should return a token');
-  assert.strictEqual(payload.email, 'admin@ebi-services.com');
-  console.log('auth fallback test passed');
+  assert.strictEqual(statusCode, 503, 'login should be unavailable when the database is offline');
+  assert.deepStrictEqual(payload, {
+    message: 'Authentication unavailable because the database is currently unreachable.',
+    error: 'DB_UNAVAILABLE',
+  });
+  console.log('auth unavailable test passed');
 })().catch((error) => {
   console.error(error);
   process.exit(1);

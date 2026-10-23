@@ -1,8 +1,6 @@
-from groq import Groq
-from config import GROQ_API_KEY
+from config import GROQ_MODEL
+from groq_client import get_groq_client
 import json
-
-client = Groq(api_key=GROQ_API_KEY)
 
 DEPARTMENTS_FR = {
     "Tele-services": "Télé-services",
@@ -125,8 +123,8 @@ def classify_intent(user_input, lang="fr"):
         )
         user_prompt = f"Classifie l'intention de l'utilisateur suivant : '{user_input}'."
 
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+    response = get_groq_client().chat.completions.create(
+        model=GROQ_MODEL,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
@@ -151,4 +149,3 @@ def classify_intent(user_input, lang="fr"):
             result["intent_en"] = name
 
     return result
-

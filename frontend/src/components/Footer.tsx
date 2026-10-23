@@ -28,49 +28,49 @@ export default function Footer({ setActiveTab }: FooterProps) {
               </span>
             </div>
             <p className="text-xs leading-relaxed text-gray-500">
-              Elite custom software development, world-class IT recruitment, and
-              secure administrative tele-services & customer support. Operating
-              worldwide with custom SLAs.
+              EBI Services vous accompagne en développement numérique,
+              recrutement et téléservices pour répondre aux besoins de votre
+              activité.
             </p>
             <div className="flex items-center space-x-2 text-[10px] font-semibold text-green-700 bg-green-50 px-2.5 py-1 rounded border border-green-100 w-fit">
               <ShieldCheck className="h-3.5 w-3.5" />
-              <span>Verified Secure Platform</span>
+              <span>Plateforme EBI Services</span>
             </div>
           </div>
 
           {}
           <div>
             <span className="block font-display text-xs font-semibold uppercase tracking-wider text-gray-900">
-              Our Offerings
+              Nos services
             </span>
             <ul className="mt-4 space-y-2 text-xs">
               {[
                 {
-                  name: "Custom ERP & SaaS Systems",
+                  name: "Applications métier et solutions sur mesure",
                   action: () => {
                     setActiveTab("services");
                   },
                 },
                 {
-                  name: "Web & Mobile Applications",
+                  name: "Applications web",
                   action: () => {
                     setActiveTab("services");
                   },
                 },
                 {
-                  name: "IT Technical Sourcing & Screening",
+                  name: "Recrutement et préqualification IT",
                   action: () => {
                     setActiveTab("services");
                   },
                 },
                 {
-                  name: "Bilingual Call Center Support",
+                  name: "Relation et support client",
                   action: () => {
                     setActiveTab("services");
                   },
                 },
                 {
-                  name: "Administrative Back Office",
+                  name: "Assistance administrative et back-office",
                   action: () => {
                     setActiveTab("services");
                   },
@@ -91,42 +91,42 @@ export default function Footer({ setActiveTab }: FooterProps) {
           {}
           <div>
             <span className="block font-display text-xs font-semibold uppercase tracking-wider text-gray-900">
-              Corporate Access
+              Accès et informations
             </span>
             <ul className="mt-4 space-y-2 text-xs">
               {[
                 {
-                  name: "Secure Client Portal",
+                  name: "Espace client",
                   action: () => {
                     setActiveTab("portal");
                   },
                 },
                 {
-                  name: "Request Meeting",
+                  name: "Demander un rendez-vous",
                   action: () => {
                     setActiveTab("contact");
                   },
                 },
                 {
-                  name: "Get Custom Quotation",
-                  action: () => {
-                    setActiveTab("portal");
-                  },
-                },
-                {
-                  name: "Contact Form",
+                  name: "Demander un devis",
                   action: () => {
                     setActiveTab("contact");
                   },
                 },
                 {
-                  name: "Privacy Policy",
+                  name: "Formulaire de contact",
+                  action: () => {
+                    setActiveTab("contact");
+                  },
+                },
+                {
+                  name: "Politique de confidentialité",
                   action: () => {
                     setActiveTab("privacy");
                   },
                 },
                 {
-                  name: "Terms of Use",
+                  name: "Conditions d’utilisation",
                   action: () => {
                     setActiveTab("terms");
                   },
@@ -147,7 +147,7 @@ export default function Footer({ setActiveTab }: FooterProps) {
           {}
           <div className="space-y-3">
             <span className="block font-display text-xs font-semibold uppercase tracking-wider text-gray-900">
-              Headquarters
+              Nous contacter
             </span>
             <ul className="space-y-2 text-xs text-gray-500">
               <li className="flex items-center space-x-2">
@@ -172,8 +172,7 @@ export default function Footer({ setActiveTab }: FooterProps) {
 
         <div className="mt-8 border-t border-gray-100 pt-6 text-center text-xs text-gray-400">
           <p>
-            © {new Date().getFullYear()} EBI Services. All rights reserved.
-            Registered SaaS Platform. Developed for Premium Operations.
+            © {new Date().getFullYear()} EBI Services. Tous droits réservés.
           </p>
         </div>
       </div>

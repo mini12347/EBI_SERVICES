@@ -21,7 +21,11 @@ const leadSchema = new mongoose.Schema(
       enum: ["low", "medium", "high"],
       default: "medium",
     },
-    source: { type: String, default: "chatbot" },
+    source: {
+      type: String,
+      enum: ["chatbot", "contact_form"],
+      default: "chatbot",
+    },
     userId: { type: String, default: "" },
     notes: { type: String, default: "" },
   },

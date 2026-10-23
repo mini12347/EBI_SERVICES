@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { CheckCircle, Loader2 } from "lucide-react";
-
-const API_URL = "/api/form-responses/form_response";
+import { apiCreateLead } from "../api/leads";
 
 export function FormulairePage({ setPage }: { setPage?: (p: string) => void }) {
   const [done, setDone] = useState(false);
@@ -35,18 +34,18 @@ export function FormulairePage({ setPage }: { setPage?: (p: string) => void }) {
     setLoading(true);
     setSubmitError("");
     try {
-      const res = await fetch(API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+      await apiCreateLead({
+        name: form.name,
+        email: form.email,
+        phone: form.phone,
+        projectDescription: form.need,
+        source: "contact_form",
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => null);
-        throw new Error(err?.error || "Erreur lors de l'envoi");
-      }
       setDone(true);
     } catch (err: unknown) {
-      setSubmitError(err instanceof Error ? err.message : "Erreur réseau");
+      setSubmitError(
+        err instanceof Error ? err.message : "Erreur réseau lors de l'envoi.",
+      );
     } finally {
       setLoading(false);
     }
@@ -60,8 +59,8 @@ export function FormulairePage({ setPage }: { setPage?: (p: string) => void }) {
         </div>
         <h2 className="text-xl font-bold text-foreground mb-2 tracking-tight">Formulaire soumis avec succès</h2>
         <p className="text-sm text-muted-foreground mb-8 max-w-sm mx-auto leading-relaxed">
-          Merci <strong>{form.name}</strong> ! Votre formulaire a bien été reçu.
-          Un email de confirmation a été envoyé à <strong>{form.email}</strong>.
+          Merci <strong>{form.name}</strong> ! Votre demande a bien été reçue.
+          Notre équipe reviendra vers vous.
         </p>
         <button
           onClick={() => setPage?.("dashboard")}

@@ -155,6 +155,52 @@ const login = async (req, res) => {
     }
 };
 
+const refresh = async (req, res) => {
+    try {
+        if (!global.__dbConnected) {
+            return res.status(503).json({ message: 'Session refresh is unavailable while the database is unreachable.' });
+        }
+        const { refresh_token } = req.body;
+        if (!refresh_token) return res.status(401).json({ message: 'Refresh token is required' });
+
+        let decoded;
+        try {
+            decoded = jwt.verify(
+                refresh_token,
+                process.env.JWT_REFRESH_SECRET || 'fallback_refresh_secret'
+            );
+        } catch {
+            return res.status(401).json({ message: 'Refresh token is invalid or expired. Please sign in again.' });
+        }
+
+        const activeToken = await Token.findOne({
+            refresh_token,
+            utilisateur: decoded.id,
+            actif: true,
+        });
+        if (!activeToken) {
+            return res.status(401).json({ message: 'Refresh token is no longer active. Please sign in again.' });
+        }
+
+        const user = await User.findById(decoded.id);
+        if (!user) return res.status(401).json({ message: 'User not found. Please sign in again.' });
+
+        const revoked = await Token.findOneAndUpdate(
+            { _id: activeToken._id, actif: true },
+            { $set: { actif: false } },
+            { returnDocument: 'after' }
+        );
+        if (!revoked) {
+            return res.status(401).json({ message: 'Refresh token is no longer active. Please sign in again.' });
+        }
+
+        const tokens = await generateTokens(user._id);
+        res.status(200).json(tokens);
+    } catch (error) {
+        res.status(500).json({ message: 'Could not refresh session', error: error.message });
+    }
+};
+
 // @desc    Get user data
 // @route   GET /api/auth/me
 // @access  Private
@@ -345,6 +391,7 @@ const resendVerification = async (req, res) => {
 module.exports = {
     register,
     login,
+    refresh,
     getMe,
     forgotPassword,
     resetPassword,

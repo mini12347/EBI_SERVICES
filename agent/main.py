@@ -8,6 +8,7 @@ from general_questions_responder import generate_response
 from department_handler import classify_intent, resolve_department_key, resolve_department_name
 from department_contexts import build_context
 from rdv_manager import RDVManager
+from service_faq import get_service_faq_response
 
 rdv_manager = RDVManager()
 
@@ -374,6 +375,10 @@ def process_query(query: str, lang: str = None) -> str:
         if is_app_navigation_query(query) and not is_negation(query, lang):
             context = build_context({"intent": "Aucun departement approprie", "confiance": 0.0})
             return call_generate_response(query, context, lang)
+
+        service_response = get_service_faq_response(query, lang)
+        if service_response:
+            return service_response
 
         intent = classify_intent(query, lang=lang) or {}
         confiance = intent.get("confiance", 0) or intent.get("confidence", 0) or 0

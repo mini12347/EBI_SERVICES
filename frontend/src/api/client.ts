@@ -8,6 +8,60 @@ class ApiError extends Error {
   }
 }
 
+let refreshInProgress: Promise<string> | null = null;
+
+async function refreshAccessToken(): Promise<string> {
+  if (!refreshInProgress) {
+    refreshInProgress = (async () => {
+      const refreshToken = localStorage.getItem('ebi_refresh_token');
+      if (!refreshToken) {
+        throw new ApiError('Your session has expired. Please sign in again.', 401);
+      }
+      const response = await fetch(`${API_BASE}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+      const body = await response.json().catch(() => ({ message: response.statusText }));
+      if (!response.ok || !body.access_token || !body.refresh_token) {
+        throw new ApiError(body.message || 'Your session has expired. Please sign in again.', response.status || 401);
+      }
+      localStorage.setItem('ebi_api_token', body.access_token);
+      localStorage.setItem('ebi_refresh_token', body.refresh_token);
+      return body.access_token as string;
+    })().finally(() => {
+      refreshInProgress = null;
+    });
+  }
+  return refreshInProgress;
+}
+
+export async function apiFetch(endpoint: string, options: RequestInit = {}): Promise<Response> {
+  const send = () => {
+    const headers = new Headers(options.headers);
+    const token = localStorage.getItem('ebi_api_token');
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    return fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+  };
+
+  const response = await send();
+  if (response.status !== 401 || endpoint === '/auth/refresh' || !localStorage.getItem('ebi_refresh_token')) {
+    return response;
+  }
+
+  try {
+    await refreshAccessToken();
+    return await send();
+  } catch (error) {
+    localStorage.removeItem('ebi_api_token');
+    localStorage.removeItem('ebi_refresh_token');
+    localStorage.removeItem('ebi_session_token');
+    localStorage.removeItem('ebi_auth_mode');
+    window.dispatchEvent(new Event('ebi:session-expired'));
+    throw error;
+  }
+}
+
 async function request<T>(
   endpoint: string,
   options: RequestInit = {},
@@ -21,7 +75,7 @@ async function request<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${endpoint}`, {
+  const res = await apiFetch(endpoint, {
     ...options,
     headers,
   });
@@ -44,7 +98,7 @@ export async function uploadFile(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${endpoint}`, {
+  const res = await apiFetch(endpoint, {
     method: 'POST',
     headers,
     body: formData,
