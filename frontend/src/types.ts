@@ -51,6 +51,7 @@ export interface Appointment {
 export interface QuoteRequest {
   id: string;
   userId: string;
+  userEmail?: string;
   clientName: string;
   company: string;
   industry: string;
@@ -60,6 +61,9 @@ export interface QuoteRequest {
   requirements: string;
   attachmentName?: string;
   attachmentUrl?: string;
+  managerId?: string | null;
+  managerName?: string;
+  archivedAt?: string | null;
   status: "new" | "in_review" | "waiting" | "quoted" | "accepted" | "rejected";
   createdAt: string;
 }
@@ -116,6 +120,8 @@ export interface ClientDocument {
   size: string;
   url: string;
   createdAt: string;
+  origin?: "client" | "admin";
+  requestName?: string;
 }
 
 export interface ActivityLog {

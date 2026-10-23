@@ -1,6 +1,7 @@
 const { execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const { getPythonInvocation } = require('../utils/pythonRuntime');
 
 const AGENT_DIR = path.resolve(__dirname, '../../agent');
 
@@ -12,11 +13,12 @@ exports.queryAgent = async (req, res) => {
         }
 
         const pythonScript = path.join(AGENT_DIR, 'main.py');
-        const args = [pythonScript, query];
+        const python = getPythonInvocation();
+        const args = [...python.args, pythonScript, query];
         if (lang === 'fr' || lang === 'en') {
             args.push(lang);
         }
-        const child = execFile('python', args, {
+        const child = execFile(python.command, args, {
             cwd: AGENT_DIR,
             timeout: 60000,
             env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
@@ -181,7 +183,12 @@ exports.classifyIntent = async (req, res) => {
         }
 
         const pythonScript = path.join(AGENT_DIR, 'intent_classifier.py');
-        const child = execFile('python', [pythonScript, query], {
+        const python = getPythonInvocation();
+        const child = execFile(python.command, [
+            ...python.args,
+            pythonScript,
+            query,
+        ], {
             cwd: AGENT_DIR,
             timeout: 15000,
         });
@@ -218,7 +225,8 @@ exports.classifyIntent = async (req, res) => {
 
 exports.healthCheck = async (req, res) => {
     const pythonInstalled = await new Promise((resolve) => {
-        execFile('python', ['--version'], { timeout: 5000 }, (err) => {
+        const python = getPythonInvocation();
+        execFile(python.command, [...python.args, '--version'], { timeout: 5000 }, (err) => {
             resolve(!err);
         });
     });

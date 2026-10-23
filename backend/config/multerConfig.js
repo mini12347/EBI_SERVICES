@@ -10,21 +10,18 @@ if (!fs.existsSync(uploadDir)) {
 // Set storage engine
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, 'uploads/');
+        cb(null, uploadDir);
     },
     filename: function (req, file, cb) {
-        cb(null, `${file.fieldname}-${Date.now()}${path.extname(file.originalname)}`);
+        const safeExtension = path.extname(file.originalname).toLowerCase();
+        cb(null, `${file.fieldname}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${safeExtension}`);
     }
 });
 
 // Check file type
 function checkFileType(file, cb) {
-    // Allowed ext
-    const filetypes = /pdf|doc|docx|xls|xlsx|png|jpg|jpeg|gif|txt|csv/;
-    // Check ext
-    const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
-    // Check mime
-    const mimetype = /application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument|image\/|text\/|application\/csv/.test(file.mimetype);
+    const extname = /\.(pdf|doc|docx|xls|xlsx|png|jpe?g|gif|txt|csv)$/i.test(file.originalname);
+    const mimetype = /^(application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet)|application\/vnd\.ms-excel|application\/csv|text\/(plain|csv)|image\/(png|jpe?g|gif))$/i.test(file.mimetype);
 
     if (mimetype && extname) {
         return cb(null, true);
@@ -36,6 +33,7 @@ function checkFileType(file, cb) {
 // Init upload
 const upload = multer({
     storage: storage,
+    limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: function (req, file, cb) {
         checkFileType(file, cb);
     }

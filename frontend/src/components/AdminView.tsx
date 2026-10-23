@@ -20,6 +20,9 @@ import {
   BarChart3,
   Send,
   CalendarDays,
+  UploadCloud,
+  Download,
+  FileText,
 } from "lucide-react";
 import {
   AreaChart,
@@ -47,7 +50,9 @@ import {
   Conversation,
 } from "../types";
 import { clientDb } from "../clientDb";
+import { getDepartment } from "../departments";
 import { apiGetUsers, apiGetUsersByRole } from "../api/auth";
+import type { ApiUser } from "../api/auth";
 import {
   apiGetDemandes,
   apiGetDevis,
@@ -67,6 +72,7 @@ import {
   apiDeleteLead,
 } from "../api/leads";
 import { apiGetAllAppointments, apiUpdateAppointmentStatus } from "../api/appointments";
+import { apiDownloadDocument, apiGetDocuments, apiUploadDocumentForClient, type ApiDocument } from "../api/documents";
 
 interface AdminViewProps {
   currentUser: User;
@@ -75,16 +81,19 @@ interface AdminViewProps {
 
 export default function AdminView({ currentUser, token }: AdminViewProps) {
   const [adminSubTab, setAdminSubTab] = useState<
-    "dashboard" | "crm" | "quotes" | "appointments" | "messaging" | "settings" | "logs"
+    "dashboard" | "crm" | "quotes" | "documents" | "appointments" | "messaging" | "settings" | "logs"
   >("dashboard");
 
   const [leads, setLeads] = useState<Lead[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [quoteRequests, setQuoteRequests] = useState<QuoteRequest[]>([]);
+  const [adminManagers, setAdminManagers] = useState<ApiUser[]>([]);
+  const [showArchivedRequests, setShowArchivedRequests] = useState(false);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [analytics, setAnalytics] = useState<any>(null);
+  const [analyticsError, setAnalyticsError] = useState("");
 
   const [leadSearch, setLeadSearch] = useState("");
   const [leadDeptFilter, setLeadDeptFilter] = useState("all");
@@ -113,7 +122,17 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [chatInput, setChatInput] = useState("");
+  const [messagingError, setMessagingError] = useState("");
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [documents, setDocuments] = useState<ApiDocument[]>([]);
+  const [documentClients, setDocumentClients] = useState<ApiUser[]>([]);
+  const [selectedDocumentClientId, setSelectedDocumentClientId] = useState("");
+  const [selectedDocumentRequestId, setSelectedDocumentRequestId] = useState("");
+  const [documentUploadFile, setDocumentUploadFile] = useState<File | null>(null);
+  const [documentActionMessage, setDocumentActionMessage] = useState("");
+  const [isUploadingDocument, setIsUploadingDocument] = useState(false);
+  const documentUploadInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const apiLeadsRef = useRef<Lead[]>([]);
 
@@ -121,72 +140,119 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
     fetchAdminData();
     fetchMessagingData();
     const interval = setInterval(fetchAdminData, 12000);
-    return () => clearInterval(interval);
+    const messagingInterval = setInterval(fetchMessagingData, 10000);
+    return () => {
+      clearInterval(interval);
+      clearInterval(messagingInterval);
+    };
   }, [token]);
 
   const fetchAdminData = async () => {
+    const isApiSession = localStorage.getItem("ebi_auth_mode") === "api";
+    let apiQuoteRequests: QuoteRequest[] | null = null;
+    let apiQuoteData: Quote[] | null = null;
+    let apiLeadsLoaded = false;
+
     // Try API for users / demandes / devis
     try {
       const demandes = await apiGetDemandes();
-      if (demandes && demandes.length > 0) {
-        const mapped: QuoteRequest[] = demandes.map((d: any) => ({
-          id: d._id,
-          userId: typeof d.client === 'object' ? d.client._id : d.client,
-          clientName: typeof d.client === 'object' ? d.client.fullname : '',
-          company: '',
-          industry: typeof d.service === 'object' ? d.service.nom || '' : '',
-          projectType: typeof d.service === 'object' ? d.service.nom || '' : '',
-          budget: '',
-          deadline: '',
-          requirements: d.besoin,
-          status: mapStatut(d.statut),
-          createdAt: d.createdAt,
-        }));
-        setQuoteRequests(mapped);
+      const mapped: QuoteRequest[] = demandes.map((d) => ({
+        id: d._id,
+        userId: typeof d.client === 'string' ? d.client : d.client?._id || '',
+        userEmail: typeof d.client === 'object' && d.client !== null ? d.client.email : undefined,
+        clientName: typeof d.client === 'object' && d.client !== null ? d.client.fullname : 'Client inconnu',
+        company: typeof d.client === 'object' && d.client !== null ? d.client.entreprise || '' : '',
+        industry: d.secteur || '',
+        projectType: d.service && typeof d.service === 'object' ? d.service.nom || '' : '',
+        budget: d.budget || '',
+        deadline: d.delai || '',
+        requirements: d.besoin,
+        status: mapStatut(d.statut),
+        managerId: typeof d.manager === 'object' && d.manager !== null
+          ? d.manager._id
+          : typeof d.manager === 'string' ? d.manager : null,
+        managerName: typeof d.manager === 'object' && d.manager !== null
+          ? d.manager.fullname
+          : undefined,
+        archivedAt: d.archivedAt || null,
+        createdAt: d.createdAt,
+      }));
+      apiQuoteRequests = mapped;
+      setQuoteRequests(mapped);
+    } catch (error) {
+      if (localStorage.getItem("ebi_auth_mode") === "api") {
+        console.error("Could not load quote requests from the API.", error);
+        setQuoteRequests([]);
       }
-    } catch { /* fallback */ }
+    }
 
     try {
       const devisList = await apiGetDevis();
-      if (devisList && devisList.length > 0) {
-        const mapped: Quote[] = devisList.map((d: any) => ({
-          id: d._id,
-          quoteRequestId: typeof d.demande === 'object' ? d.demande._id : d.demande,
-          clientName: '',
-          projectName: `Devis ${d._id.slice(-6)}`,
-          amount: d.montant,
-          terms: '',
-          expiryDate: '',
-          status: mapDevisStatut(d.statut),
-          createdAt: d.createdAt,
-        }));
-        setQuotes(mapped);
+      const mapped: Quote[] = devisList.map((d: any) => ({
+        id: d._id,
+        quoteRequestId: typeof d.demande === 'object' ? d.demande._id : d.demande,
+        clientName: '',
+        projectName: `Devis ${d._id.slice(-6)}`,
+        amount: d.montant,
+        terms: '',
+        expiryDate: '',
+        status: mapDevisStatut(d.statut),
+        createdAt: d.createdAt,
+      }));
+      apiQuoteData = mapped;
+      setQuotes(mapped);
+    } catch (error) {
+      if (localStorage.getItem("ebi_auth_mode") === "api") {
+        console.error("Could not load quotes from the API.", error);
+        setQuotes([]);
       }
-    } catch { /* fallback */ }
+    }
+
+    if (isApiSession) {
+      try {
+        const [apiDocuments, clients] = await Promise.all([
+          apiGetDocuments(),
+          apiGetUsersByRole("client"),
+        ]);
+        setDocuments(apiDocuments);
+        setDocumentClients(clients);
+        setSelectedDocumentClientId((current) => current || clients[0]?._id || "");
+      } catch (error) {
+        console.error("Could not load document exchange data.", error);
+        setDocumentActionMessage(error instanceof Error ? error.message : "Impossible de charger les documents.");
+      }
+
+      try {
+        setAdminManagers(await apiGetUsersByRole("admin"));
+      } catch (error) {
+        console.error("Could not load admin managers.", error);
+        setAdminManagers([]);
+      }
+    }
 
     // Try backend for leads collected by the chatbot / contact form
     try {
       const apiLeads = await apiGetLeads();
-      if (apiLeads && apiLeads.length > 0) {
-        apiLeadsRef.current = apiLeads.map((l: any) => ({
-          id: l._id,
-          name: l.name,
-          company: l.company,
-          email: l.email,
-          phone: l.phone,
-          country: l.country,
-          projectDescription: l.projectDescription,
-          budget: l.budget,
-          deadline: l.deadline,
-          status: l.status,
-          suggestedDepartment: l.suggestedDepartment,
-          priority: l.priority,
-          conversationSummary: l.source ? `Source: ${l.source}` : undefined,
-          notes: l.notes || "",
-          createdAt: l.createdAt,
-        }));
-      }
-    } catch {
+      apiLeadsRef.current = apiLeads.map((l: any) => ({
+        id: l._id,
+        name: l.name,
+        company: l.company,
+        email: l.email,
+        phone: l.phone,
+        country: l.country,
+        projectDescription: l.projectDescription,
+        budget: l.budget,
+        deadline: l.deadline,
+        status: l.status,
+        suggestedDepartment: l.suggestedDepartment,
+        priority: l.priority,
+        conversationSummary: l.source ? `Source: ${l.source}` : undefined,
+        notes: l.notes || "",
+        createdAt: l.createdAt,
+      }));
+      apiLeadsLoaded = true;
+    } catch (error) {
+      console.error("Could not load leads for CRM analytics.", error);
       apiLeadsRef.current = [];
     }
 
@@ -227,8 +293,10 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
         setAppointments(rApts);
       }
 
-      if (rReqs.length > 0) setQuoteRequests(rReqs);
-      if (rQuotes.length > 0) setQuotes(rQuotes);
+      if (!isApiSession) {
+        setQuoteRequests(rReqs);
+        setQuotes(rQuotes);
+      }
       setLogs(rLogs);
 
       const mergedLeads = new Map<string, Lead>();
@@ -239,61 +307,6 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
       const leadsAll = Array.from(mergedLeads.values());
       setLeads(leadsAll);
 
-      const totalLeads = leadsAll.length;
-      const totalClients = clientDb
-        .getUsers()
-        .filter((u) => u.role === "client").length;
-
-      const acceptedQuotes = rQuotes.filter((q) => q.status === "accepted");
-      const revenue = acceptedQuotes.reduce(
-        (acc, curr) => acc + curr.amount,
-        0,
-      );
-
-      const pendingQuotes = rQuotes.filter((q) => q.status === "sent").length;
-      const pendingQuoteAmount = rQuotes
-        .filter((q) => q.status === "sent")
-        .reduce((acc, curr) => acc + curr.amount, 0);
-
-      const conversionRate =
-        rQuotes.length > 0
-          ? Math.round((acceptedQuotes.length / rQuotes.length) * 100)
-          : 0;
-
-      const requestsByDept: Record<string, number> = {
-        Development: 0,
-        Recruitment: 0,
-        Outsourcing: 0,
-      };
-      leadsAll.forEach((l) => {
-        const dept = l.suggestedDepartment || "Development";
-        if (requestsByDept[dept] !== undefined) {
-          requestsByDept[dept]++;
-        } else {
-          requestsByDept[dept] = 1;
-        }
-      });
-
-      const monthlyRevenue = [
-        { name: "Jan", revenue: Math.round(revenue * 0.15) },
-        { name: "Feb", revenue: Math.round(revenue * 0.25) },
-        { name: "Mar", revenue: Math.round(revenue * 0.4) },
-        { name: "Apr", revenue: Math.round(revenue * 0.6) },
-        { name: "May", revenue: Math.round(revenue * 0.85) },
-        { name: "Jun", revenue: revenue },
-      ];
-
-      setAnalytics({
-        totalLeads,
-        totalClients,
-        revenue,
-        pendingQuotes,
-        pendingQuoteAmount,
-        conversionRate,
-        requestsByDept,
-        monthlyRevenue,
-      });
-
       if (rSettings) {
         setSettings(rSettings);
         setWebsiteName(rSettings.websiteName || "");
@@ -302,12 +315,184 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
         setEmailTemplateQuote(rSettings.emailTemplateQuote || "");
         setEmailTemplateAppointment(rSettings.emailTemplateAppointment || "");
       }
+
+      const analyticsLeads = isApiSession ? apiLeadsRef.current : leadsAll;
+      const analyticsRequests = isApiSession ? apiQuoteRequests : rReqs;
+      const analyticsQuotes = isApiSession ? apiQuoteData : rQuotes;
+
+      if (!analyticsLeads || !analyticsRequests || !analyticsQuotes || (isApiSession && !apiLeadsLoaded)) {
+        setAnalyticsError("Impossible de charger toutes les données des statistiques. Vérifiez la connexion au serveur.");
+        return;
+      }
+
+      setAnalyticsError("");
+      const prospectKeys = new Set<string>();
+      analyticsLeads.forEach((lead) => {
+        const email = lead.email?.trim().toLowerCase();
+        prospectKeys.add(email ? `email:${email}` : `lead:${lead.id}`);
+      });
+      analyticsRequests.forEach((request) => {
+        const email = request.userEmail?.trim().toLowerCase();
+        const identity = email || request.userId || request.id;
+        prospectKeys.add(email ? `email:${email}` : `client:${identity}`);
+      });
+      const totalProspects = prospectKeys.size;
+      const totalRequests = analyticsRequests.length;
+      const totalQuotes = analyticsQuotes.length;
+      const acceptedQuotes = analyticsQuotes.filter((q) => q.status === "accepted");
+      const revenue = acceptedQuotes.reduce(
+        (acc, curr) => acc + curr.amount,
+        0,
+      );
+
+      const pendingQuotes = analyticsQuotes.filter((q) => q.status === "sent").length;
+      const pendingQuoteAmount = analyticsQuotes
+        .filter((q) => q.status === "sent")
+        .reduce((acc, curr) => acc + curr.amount, 0);
+
+      const conversionRate =
+        totalQuotes > 0
+          ? Math.round((acceptedQuotes.length / totalQuotes) * 100)
+          : 0;
+
+      const requestsByService: Record<string, number> = {
+        ...analyticsRequests.reduce<Record<string, number>>((counts, request) => {
+          const service = request.projectType.trim() || "Service non précisé";
+          counts[service] = (counts[service] || 0) + 1;
+          return counts;
+        }, {}),
+      };
+      const unassignedServiceRequests = requestsByService["Service non précisé"] || 0;
+
+      const currentMonth = new Date();
+      const revenueByMonth = Array.from({ length: 6 }, (_, index) => {
+        const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 5 + index, 1);
+        const monthQuotes = acceptedQuotes.filter((quote) => {
+          const createdAt = new Date(quote.createdAt);
+          return createdAt.getFullYear() === date.getFullYear()
+            && createdAt.getMonth() === date.getMonth();
+        });
+        return {
+          name: date.toLocaleDateString("fr-FR", { month: "short" }),
+          revenue: monthQuotes.reduce((sum, quote) => sum + quote.amount, 0),
+        };
+      });
+
+      setAnalytics({
+        totalProspects,
+        totalRequests,
+        totalQuotes,
+        acceptedQuoteCount: acceptedQuotes.length,
+        unassignedServiceRequests,
+        revenue,
+        pendingQuotes,
+        pendingQuoteAmount,
+        conversionRate,
+        requestsByService,
+        monthlyRevenue: revenueByMonth,
+      });
     } catch (e) {
       console.error("Admin fetch failed:", e);
     }
   };
 
+  const handleRequestAssignment = async (requestId: string, managerId: string) => {
+    try {
+      await apiUpdateDemande(requestId, { manager: managerId || null });
+      await fetchAdminData();
+    } catch (error) {
+      console.error("Could not update quote request assignment.", error);
+      alert(error instanceof Error ? error.message : "Could not update the assignment.");
+    }
+  };
+
+  const handleRequestArchive = async (request: QuoteRequest) => {
+    const archive = !request.archivedAt;
+    try {
+      await apiUpdateDemande(request.id, { archive });
+      if (archive && selectedReq?.id === request.id) {
+        setSelectedReq(null);
+      }
+      await fetchAdminData();
+    } catch (error) {
+      console.error("Could not update quote request archive status.", error);
+      alert(error instanceof Error ? error.message : "Could not update archive status.");
+    }
+  };
+
   const fetchMessagingData = async () => {
+    if (localStorage.getItem("ebi_auth_mode") === "api") {
+      try {
+        const [apiUsers, apiMessages] = await Promise.all([
+          apiGetUsersByRole("client"),
+          apiGetMessages(),
+        ]);
+        const users: User[] = apiUsers.map((user) => ({
+          id: user._id,
+          name: user.fullname,
+          email: user.email,
+          role: "client",
+          createdAt: user.createdAt || "",
+        }));
+        const conversationsByClientAndDepartment = new Map<string, Conversation>();
+        users.forEach((user) => {
+          const conversationId = `${user.id}:general`;
+          conversationsByClientAndDepartment.set(conversationId, {
+            id: conversationId,
+            userId: user.id,
+            clientName: user.name,
+            clientEmail: user.email,
+            status: "active",
+            department: "general",
+            repName: getDepartment("general").repName,
+            repRole: getDepartment("general").repRole,
+            lastMessageAt: "",
+          });
+        });
+        apiMessages.forEach((message) => {
+          const clientId = typeof message.client === "object" && message.client
+            ? message.client._id
+            : typeof message.client === "string" ? message.client : "";
+          const clientName = typeof message.client === "object" && message.client
+            ? message.client.fullname
+            : users.find((user) => user.id === clientId)?.name || "Client";
+          const department = message.departement || "general";
+          const conversationId = `${clientId}:${department}`;
+          const conversation = conversationsByClientAndDepartment.get(conversationId) || {
+            id: conversationId,
+            userId: clientId,
+            clientName,
+            clientEmail: users.find((user) => user.id === clientId)?.email || "",
+            status: "active" as const,
+            department,
+            repName: getDepartment(department).repName,
+            repRole: getDepartment(department).repRole,
+            lastMessageAt: message.createdAt,
+          };
+          if (!conversation.lastMessageAt || new Date(message.createdAt) >= new Date(conversation.lastMessageAt)) {
+            conversation.lastMessageAt = message.createdAt;
+            conversation.summary = message.contenu;
+          }
+          conversationsByClientAndDepartment.set(conversationId, conversation);
+        });
+        const conversations = Array.from(conversationsByClientAndDepartment.values())
+          .sort((a, b) => (b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0) - (a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0));
+        setAllUsers(users);
+        setConversations(conversations);
+        setMessagingError("");
+        setSelectedConversation((current) =>
+          conversations.find((conversation) => conversation.id === current?.id) || conversations[0] || null,
+        );
+        return;
+      } catch (error) {
+        console.error("Could not load admin conversations.", error);
+        setMessagingError(error instanceof Error ? error.message : "Impossible de charger les conversations.");
+        setConversations([]);
+        setChatMessages([]);
+        return;
+      }
+    }
+
     const users = clientDb.getUsers();
     setAllUsers(users);
 
@@ -320,27 +505,64 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
     }
   };
 
+  const handleUploadDocumentForClient = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedDocumentClientId || !documentUploadFile) {
+      setDocumentActionMessage("Choisissez un client et un fichier avant l’envoi.");
+      return;
+    }
+    setIsUploadingDocument(true);
+    setDocumentActionMessage("");
+    try {
+      await apiUploadDocumentForClient(
+        selectedDocumentClientId,
+        selectedDocumentRequestId,
+        documentUploadFile,
+      );
+      setDocumentUploadFile(null);
+      setSelectedDocumentRequestId("");
+      if (documentUploadInputRef.current) documentUploadInputRef.current.value = "";
+      setDocumentActionMessage("Document envoyé au client. Une notification lui a été transmise.");
+      setDocuments(await apiGetDocuments());
+    } catch (error) {
+      console.error("Could not send document to client.", error);
+      setDocumentActionMessage(error instanceof Error ? error.message : "Échec de l’envoi du document.");
+    } finally {
+      setIsUploadingDocument(false);
+    }
+  };
+
+  const handleDownloadSharedDocument = async (doc: ApiDocument) => {
+    try {
+      await apiDownloadDocument(doc._id, doc.nom_fichier);
+    } catch (error) {
+      console.error("Could not download shared document.", error);
+      setDocumentActionMessage(error instanceof Error ? error.message : "Échec du téléchargement.");
+    }
+  };
+
   const fetchChatMessages = async (conversationId: string) => {
     const conv = conversations.find((c) => c.id === conversationId);
     if (!conv) return;
 
-    try {
-      const apiMessages = await apiGetMessagesByClient(conv.userId);
-      if (apiMessages && apiMessages.length > 0) {
-        const mapped: Message[] = apiMessages.map((m: ApiMessage) => ({
+    if (localStorage.getItem("ebi_auth_mode") === "api") {
+      try {
+        const apiMessages = await apiGetMessagesByClient(conv.userId, conv.department || "general");
+        setChatMessages(apiMessages.map((m: ApiMessage) => ({
           id: m._id,
           conversationId: conversationId,
-          senderId: typeof m.expediteur === "object" ? m.expediteur._id : m.expediteur,
-          senderName: typeof m.expediteur === "object" ? m.expediteur.fullname : "",
-          senderRole: (typeof m.expediteur === "object" ? m.expediteur.role : "admin") as "admin" | "client",
+          senderId: typeof m.expediteur === "object" && m.expediteur ? m.expediteur._id : typeof m.expediteur === "string" ? m.expediteur : "",
+          senderName: typeof m.expediteur === "object" && m.expediteur ? m.expediteur.fullname : "Utilisateur",
+          senderRole: (typeof m.expediteur === "object" && m.expediteur ? m.expediteur.role : "client") as "admin" | "client",
           text: m.contenu,
           timestamp: m.createdAt,
-        }));
-        setChatMessages(mapped);
-        return;
+        })));
+        setMessagingError("");
+      } catch (error) {
+        console.error("Could not load conversation history.", error);
+        setMessagingError(error instanceof Error ? error.message : "Impossible de charger l’historique.");
       }
-    } catch {
-      // fallback to clientDb
+      return;
     }
 
     const allMsgs = clientDb.getMessages();
@@ -352,7 +574,11 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
     if (selectedConversation) {
       fetchChatMessages(selectedConversation.id);
     }
-  }, [selectedConversation]);
+    const interval = setInterval(() => {
+      if (selectedConversation) fetchChatMessages(selectedConversation.id);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [selectedConversation, conversations]);
 
   useEffect(() => {
     if (chatEndRef.current) {
@@ -361,29 +587,31 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
   }, [chatMessages]);
 
   const handleSendMessage = async () => {
-    if (!chatInput.trim() || !selectedConversation) return;
-
-    const clientUser = allUsers.find((u) => u.id === selectedConversation.userId);
-
-    try {
-      await apiCreateMessage({
-        client: selectedConversation.userId,
-        expediteur: currentUser.id,
-        contenu: chatInput,
-        client_email: clientUser?.email,
-      });
-    } catch {
-      // fallback to clientDb
-    }
+    const contenu = chatInput.trim();
+    if (!contenu || !selectedConversation || isSendingMessage) return;
+    setIsSendingMessage(true);
+    setMessagingError("");
 
     try {
+      if (localStorage.getItem("ebi_auth_mode") === "api") {
+        await apiCreateMessage({
+          client: selectedConversation.userId,
+          contenu,
+          departement: selectedConversation.department || "general",
+        });
+        setChatInput("");
+        await fetchMessagingData();
+        await fetchChatMessages(selectedConversation.id);
+        return;
+      }
+
       const newMsg: Message = {
         id: `msg-${Date.now()}`,
         conversationId: selectedConversation.id,
         senderId: currentUser.id,
         senderName: currentUser.name,
         senderRole: "admin",
-        text: chatInput,
+        text: contenu,
         timestamp: new Date().toISOString(),
       };
 
@@ -395,21 +623,24 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
       const conv = convs.find((c) => c.id === selectedConversation.id);
       if (conv) {
         conv.lastMessageAt = new Date().toISOString();
-        conv.summary = `Last message: ${chatInput.substring(0, 40)}...`;
+        conv.summary = contenu.substring(0, 40);
         clientDb.setConversations(convs);
       }
 
       clientDb.addNotification(
         selectedConversation.userId,
         "New Message from EBI",
-        `New message from ${currentUser.name}: "${chatInput.substring(0, 50)}"`,
+        `New message from ${currentUser.name}: "${contenu.substring(0, 50)}"`,
       );
 
       setChatInput("");
       fetchChatMessages(selectedConversation.id);
       fetchMessagingData();
     } catch (err) {
-      console.error(err);
+      console.error("Could not send message to client.", err);
+      setMessagingError(err instanceof Error ? err.message : "Échec de l’envoi du message.");
+    } finally {
+      setIsSendingMessage(false);
     }
   };
 
@@ -429,6 +660,8 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
       envoye: "sent",
       telecharge: "sent",
       archive: "rejected",
+      accepte: "accepted",
+      refuse: "rejected",
     };
     return map[s] || "sent";
   }
@@ -545,23 +778,28 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
 
     setIsIssuingQuote(true);
 
-    // Persist the quote through the backend API — this auto-generates the PDF
-    try {
-      await apiCreateDevis({
-        demande: selectedReq.id,
-        montant: parseFloat(quoteAmount),
-      });
-      clientDb.addActivityLog(
-        currentUser.id,
-        currentUser.name,
-        `Issued quotation of €${quoteAmount} for "${selectedReq.projectType}"`,
-      );
-      setSelectedReq(null);
-      setQuoteAmount("");
-      fetchAdminData();
+    if (localStorage.getItem("ebi_auth_mode") === "api") {
+      try {
+        await apiCreateDevis({
+          demande: selectedReq.id,
+          montant: parseFloat(quoteAmount),
+          terms: quoteTerms,
+        });
+        clientDb.addActivityLog(
+          currentUser.id,
+          currentUser.name,
+          `Issued quotation of €${quoteAmount} for "${selectedReq.projectType}"`,
+        );
+        setSelectedReq(null);
+        setQuoteAmount("");
+        fetchAdminData();
+      } catch (error) {
+        console.error("API quote creation failed.", error);
+        alert(error instanceof Error ? error.message : "Could not issue the quote.");
+      } finally {
+        setIsIssuingQuote(false);
+      }
       return;
-    } catch (err) {
-      console.error('API quote creation failed, falling back to local:', err);
     }
 
     try {
@@ -651,11 +889,16 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
       });
     } else {
       csvContent += "Financial Metric,Value\n";
-      csvContent += `"Total CRM Leads",${leads.length}\n`;
-      csvContent += `"Active Clients",${analytics?.totalClients || 0}\n`;
+      csvContent += `"Prospects",${analytics?.totalProspects || 0}\n`;
+      csvContent += `"Quote Requests",${analytics?.totalRequests || 0}\n`;
+      csvContent += `"Total Quote Proposals",${analytics?.totalQuotes || 0}\n`;
       csvContent += `"Pending Quote Proposals",${analytics?.pendingQuotes || 0}\n`;
       csvContent += `"Accepted Project Revenue",${analytics?.revenue || 0}\n`;
-      csvContent += `"Corporate Conversion Rate",${analytics?.conversionRate || 0}%\n`;
+      csvContent += `"Quote Conversion Rate",${analytics?.conversionRate || 0}%\n`;
+      csvContent += "Requests by Service,Count\n";
+      Object.entries(analytics?.requestsByService || {}).forEach(([service, count]) => {
+        csvContent += `"${service}",${count}\n`;
+      });
     }
 
     const encodedUri = encodeURI(csvContent);
@@ -689,14 +932,17 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
 
   const revenueChartData = analytics?.monthlyRevenue || [];
 
-  const deptPieData = analytics?.requestsByDept
-    ? Object.keys(analytics.requestsByDept).map((key) => ({
+  const servicePieData = analytics?.requestsByService
+    ? Object.keys(analytics.requestsByService).map((key) => ({
         name: key,
-        value: analytics.requestsByDept[key],
+        value: analytics.requestsByService[key],
       }))
     : [];
 
   const COLORS = ["#1e3a8a", "#10b981", "#8b5cf6", "#f59e0b", "#ef4444"];
+  const visibleQuoteRequests = quoteRequests.filter((request) =>
+    Boolean(request.archivedAt) === showArchivedRequests,
+  );
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-8">
@@ -746,6 +992,7 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
             { id: "dashboard", label: "CRM Analytics" },
             { id: "crm", label: "Manage Leads" },
             { id: "quotes", label: "Quote Proposals" },
+            { id: "documents", label: "Documents" },
             { id: "appointments", label: "Appointments Board" },
             { id: "messaging", label: "Messaging" },
             { id: "settings", label: "System Configs" },
@@ -771,39 +1018,44 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
       {}
       {adminSubTab === "dashboard" && (
         <div className="space-y-8">
+          {analyticsError && (
+            <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
+              {analyticsError}
+            </div>
+          )}
           {}
           <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
             <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm text-left">
               <span className="block text-[10px] text-gray-400 font-bold uppercase">
-                Total Leads
+                Prospects
               </span>
               <span className="block text-2.5xl font-extrabold text-slate-900 mt-1">
-                {analytics?.totalLeads || 0}
+                {analytics?.totalProspects || 0}
               </span>
               <span className="block text-[9px] text-gray-500 mt-1">
-                Acquired leads
+                Leads + quote requests, deduplicated when possible
               </span>
             </div>
             <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm text-left">
               <span className="block text-[10px] text-gray-400 font-bold uppercase">
-                Active Clients
+                Quote Proposals
               </span>
               <span className="block text-2.5xl font-extrabold text-slate-900 mt-1">
-                {analytics?.totalClients || 0}
+                {analytics?.totalQuotes || 0}
               </span>
               <span className="block text-[9px] text-gray-500 mt-1">
-                Portal accounts
+                {analytics?.acceptedQuoteCount || 0} accepted — {analytics?.totalRequests || 0} requests
               </span>
             </div>
             <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm text-left">
               <span className="block text-[10px] text-gray-400 font-bold uppercase">
-                SLA Conversion
+                Quote Conversion
               </span>
               <span className="block text-2.5xl font-extrabold text-slate-900 mt-1">
                 {analytics?.conversionRate || 0}%
               </span>
               <span className="block text-[9px] text-gray-500 mt-1">
-                Acceptance funnel
+                {analytics?.acceptedQuoteCount || 0} / {analytics?.totalQuotes || 0} accepted quotes
               </span>
             </div>
             <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm text-left">
@@ -822,10 +1074,10 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
                 Pending Estimates
               </span>
               <span className="block text-2.5xl font-extrabold text-amber-600 mt-1">
-                €{(analytics?.pendingQuoteAmount || 0).toLocaleString()}
+                {analytics?.pendingQuotes || 0}
               </span>
               <span className="block text-[9px] text-gray-500 mt-1">
-                Quotes awaiting client
+                Awaiting client — €{(analytics?.pendingQuoteAmount || 0).toLocaleString()}
               </span>
             </div>
           </div>
@@ -865,8 +1117,7 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
                   Performance Over Time
                 </h3>
                 <p className="text-[10px] text-gray-400">
-                  Monthly breakdown of contracted revenue against leads
-                  ingestion.
+                  Accepted quote revenue over the last six months.
                 </p>
               </div>
               <div className="h-64">
@@ -908,28 +1159,33 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
             <div className="md:col-span-4 bg-white border border-gray-200 rounded-2xl p-6 shadow-sm text-left space-y-4">
               <div>
                 <h3 className="font-display text-sm font-bold text-slate-900">
-                  Leads by Department
+                  Requests by Service
                 </h3>
                 <p className="text-[10px] text-gray-400">
-                  Demand distribution across our three operational pillars.
+                  {analytics?.totalRequests || 0} submitted quote requests grouped by service.
                 </p>
+                {!!analytics?.unassignedServiceRequests && (
+                  <p className="mt-1 text-[10px] text-amber-700">
+                    {analytics.unassignedServiceRequests} request(s) have no linked service.
+                  </p>
+                )}
               </div>
               <div className="h-44 relative flex items-center justify-center">
-                {deptPieData.length === 0 ? (
+                {servicePieData.length === 0 ? (
                   <span className="text-xs text-gray-400">
-                    No department data.
+                    No service data.
                   </span>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={deptPieData}
+                        data={servicePieData}
                         innerRadius={50}
                         outerRadius={70}
                         paddingAngle={4}
                         dataKey="value"
                       >
-                        {deptPieData.map((entry, index) => (
+                        {servicePieData.map((entry, index) => (
                           <Cell
                             key={`cell-${index}`}
                             fill={COLORS[index % COLORS.length]}
@@ -942,7 +1198,7 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
                 )}
               </div>
               <div className="space-y-2 text-[10px] border-t border-gray-100 pt-3">
-                {deptPieData.map((entry, idx) => (
+                {servicePieData.map((entry, idx) => (
                   <div key={idx} className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5 font-medium">
                       <span
@@ -952,7 +1208,7 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
                       {entry.name}
                     </span>
                     <span className="font-bold text-slate-950">
-                      {entry.value} leads
+                      {entry.value} requests
                     </span>
                   </div>
                 ))}
@@ -1149,17 +1405,26 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
         <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
           {}
           <div className="md:col-span-7 bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-4">
-            <h3 className="font-display text-sm font-bold text-slate-950 border-b border-gray-100 pb-3 text-left">
-              Quote Requests Pipeline
-            </h3>
+            <div className="flex items-center justify-between gap-3 border-b border-gray-100 pb-3">
+              <h3 className="font-display text-sm font-bold text-slate-950 text-left">
+                {showArchivedRequests ? "Archived Quote Requests" : "Quote Requests Pipeline"}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowArchivedRequests((current) => !current)}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-[10px] font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                {showArchivedRequests ? "View active requests" : "View archive"}
+              </button>
+            </div>
 
-            {quoteRequests.length === 0 ? (
+            {visibleQuoteRequests.length === 0 ? (
               <div className="text-center py-12 text-gray-400 text-xs">
-                No quote requests submitted yet.
+                {showArchivedRequests ? "No archived quote requests." : "No quote requests submitted yet."}
               </div>
             ) : (
               <div className="space-y-4">
-                {quoteRequests.map((req) => (
+                {visibleQuoteRequests.map((req) => (
                   <div
                     key={req.id}
                     className="rounded-xl border border-gray-150 p-4 space-y-2 text-left hover:border-blue-200 transition"
@@ -1207,6 +1472,33 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
                       </div>
                     </div>
 
+                    {localStorage.getItem("ebi_auth_mode") === "api" && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        <label className="flex items-center gap-2 text-[10px] font-semibold text-slate-700">
+                          Assigned manager
+                          <select
+                            value={req.managerId || ""}
+                            onChange={(event) => handleRequestAssignment(req.id, event.target.value)}
+                            className="max-w-48 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px]"
+                          >
+                            <option value="">Unassigned</option>
+                            {adminManagers.map((manager) => (
+                              <option key={manager._id} value={manager._id}>
+                                {manager.fullname}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => handleRequestArchive(req)}
+                          className="rounded-md border border-gray-200 px-2.5 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-50"
+                        >
+                          {req.archivedAt ? "Restore request" : "Archive request"}
+                        </button>
+                      </div>
+                    )}
+
                     <div className="flex justify-between items-center pt-2 border-t border-gray-100">
                       {req.attachmentName ? (
                         <a
@@ -1221,7 +1513,7 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
                         </span>
                       )}
 
-                      {["new", "in_review"].includes(req.status) && (
+                      {!req.archivedAt && ["new", "in_review"].includes(req.status) && (
                         <button
                           onClick={() => {
                             setSelectedReq(req);
@@ -1314,6 +1606,106 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {adminSubTab === "documents" && (
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">
+          <form
+            onSubmit={handleUploadDocumentForClient}
+            className="xl:col-span-2 space-y-4 rounded-2xl border border-gray-200 bg-white p-6 text-left shadow-sm"
+          >
+            <div>
+              <h3 className="font-display text-sm font-bold text-slate-950">Envoyer un document à un client</h3>
+              <p className="mt-1 text-xs text-gray-500">Le fichier sera privé et accessible uniquement au client choisi et à l’administration.</p>
+            </div>
+            <label className="block space-y-1 text-xs font-semibold text-gray-700">
+              Client
+              <select
+                value={selectedDocumentClientId}
+                onChange={(event) => {
+                  setSelectedDocumentClientId(event.target.value);
+                  setSelectedDocumentRequestId("");
+                }}
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2"
+                required
+              >
+                <option value="">Sélectionner un client</option>
+                {documentClients.map((client) => (
+                  <option key={client._id} value={client._id}>{client.fullname} — {client.email}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block space-y-1 text-xs font-semibold text-gray-700">
+              Demande associée (facultatif)
+              <select
+                value={selectedDocumentRequestId}
+                onChange={(event) => setSelectedDocumentRequestId(event.target.value)}
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2"
+              >
+                <option value="">Document général</option>
+                {quoteRequests.filter((request) => request.userId === selectedDocumentClientId).map((request) => (
+                  <option key={request.id} value={request.id}>{request.projectType} — {request.requirements.slice(0, 45)}</option>
+                ))}
+              </select>
+            </label>
+            <input
+              ref={documentUploadInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.txt,.csv"
+              onChange={(event) => setDocumentUploadFile(event.target.files?.[0] || null)}
+              className="block w-full text-xs text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-blue-900"
+              required
+            />
+            <p className="text-[10px] text-gray-400">PDF, Word, Excel, images et fichiers texte — 10 Mo maximum.</p>
+            <button
+              type="submit"
+              disabled={isUploadingDocument || documentClients.length === 0}
+              className="flex items-center gap-2 rounded-lg bg-blue-900 px-4 py-2 text-xs font-bold text-white hover:bg-blue-950 disabled:opacity-50"
+            >
+              <UploadCloud className="h-4 w-4" />
+              {isUploadingDocument ? "Envoi..." : "Envoyer au client"}
+            </button>
+            {documentActionMessage && <p role="status" className="text-xs text-blue-900">{documentActionMessage}</p>}
+          </form>
+
+          <section className="xl:col-span-3 space-y-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="border-b border-gray-100 pb-3 text-left">
+              <h3 className="font-display text-sm font-bold text-slate-950">Documents partagés</h3>
+              <p className="mt-1 text-xs text-gray-500">Historique des documents envoyés et reçus pour les clients.</p>
+            </div>
+            {documents.length === 0 ? (
+              <div className="py-10 text-center text-xs text-gray-400">Aucun document partagé pour le moment.</div>
+            ) : (
+              <div className="space-y-3">
+                {documents.map((doc) => {
+                  const clientName = typeof doc.client === "object" && doc.client ? doc.client.fullname : "Client";
+                  const senderName = typeof doc.uploaded_by === "object" && doc.uploaded_by ? doc.uploaded_by.fullname : "Utilisateur";
+                  const requestName = typeof doc.demande === "object" && doc.demande ? doc.demande.besoin : "";
+                  return (
+                    <div key={doc._id} className="flex items-center justify-between gap-4 rounded-xl border border-gray-150 p-4 text-left">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <FileText className="h-5 w-5 shrink-0 text-blue-900" />
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-bold text-slate-900">{doc.nom_fichier}</p>
+                          <p className="text-[10px] text-gray-500">{clientName} · {doc.origine === "admin" ? "Envoyé par EBI" : "Reçu du client"} · {senderName}</p>
+                          {requestName && <p className="truncate text-[10px] text-gray-400">{requestName}</p>}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadSharedDocument(doc)}
+                        className="shrink-0 rounded-lg border border-gray-200 p-2 text-gray-600 hover:text-blue-900"
+                        title="Télécharger le document"
+                      >
+                        <Download className="h-4 w-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
         </div>
       )}
 
@@ -1440,7 +1832,9 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
               </div>
               <div className="flex-1 overflow-y-auto">
                 {conversations.length === 0 && (
-                  <div className="p-6 text-center text-xs text-gray-400">No conversations yet</div>
+                  <div className={`p-6 text-center text-xs ${messagingError ? "text-red-700" : "text-gray-400"}`}>
+                    {messagingError || "No conversations yet"}
+                  </div>
                 )}
                 {conversations
                   .sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime())
@@ -1511,6 +1905,9 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
                         }`}>
                           <span className="block text-[8px] opacity-60 font-semibold mb-0.5">{m.senderName}</span>
                           {m.text}
+                          <time className="mt-1 block text-[8px] opacity-60">
+                            {new Date(m.timestamp).toLocaleString("fr-FR")}
+                          </time>
                         </div>
                       </div>
                     ))}
@@ -1522,6 +1919,7 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
                     <input
                       type="text"
                       placeholder="Type a message to this client..."
+                      maxLength={5000}
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
@@ -1529,12 +1927,13 @@ export default function AdminView({ currentUser, token }: AdminViewProps) {
                     />
                     <button
                       onClick={handleSendMessage}
-                      disabled={!chatInput.trim()}
+                      disabled={!chatInput.trim() || isSendingMessage}
                       className="h-8 w-8 rounded-xl bg-blue-900 text-white flex items-center justify-center hover:bg-blue-950 transition disabled:opacity-45 cursor-pointer"
                     >
-                      <Send className="h-3.5 w-3.5" />
+                      {isSendingMessage ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                     </button>
                   </div>
+                  {messagingError && <p role="status" className="px-4 pb-3 text-xs text-red-700">{messagingError}</p>}
                 </>
               )}
             </div>

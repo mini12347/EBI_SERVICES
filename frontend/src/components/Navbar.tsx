@@ -47,7 +47,7 @@ export default function Navbar({
               EBI Services
             </span>
             <span className="block text-[10px] font-medium uppercase tracking-wider text-blue-600">
-              Enterprise Solutions
+              Solutions pour les entreprises
             </span>
           </div>
         </div>
@@ -55,9 +55,9 @@ export default function Navbar({
         {}
         <nav className="hidden md:flex space-x-8">
           {[
-            { id: "home", label: "Home" },
-            { id: "services", label: "Services" },
-            { id: "about", label: "About Us" },
+            { id: "home", label: "Accueil" },
+            { id: "services", label: "Nos services" },
+            { id: "about", label: "À propos" },
             { id: "contact", label: "Contact" },
           ].map((tab) => (
             <button
@@ -106,7 +106,7 @@ export default function Navbar({
                   }`}
                 >
                   <ShieldAlert className="h-3.5 w-3.5" />
-                  <span>Admin CRM</span>
+                  <span>Administration</span>
                 </button>
               ) : (
                 <button
@@ -118,7 +118,7 @@ export default function Navbar({
                   }`}
                 >
                   <LayoutDashboard className="h-3.5 w-3.5" />
-                  <span>Client Portal</span>
+                  <span>Espace client</span>
                 </button>
               )}
 
@@ -136,7 +136,7 @@ export default function Navbar({
               <button
                 onClick={onLogout}
                 className="p-2 text-gray-500 hover:bg-gray-100 hover:text-red-600 rounded-full transition-all"
-                title="Log Out"
+                title="Se déconnecter"
               >
                 <LogOut className="h-4 w-4" />
               </button>
@@ -147,13 +147,13 @@ export default function Navbar({
                 onClick={() => setActiveTab("login")}
                 className="px-4 py-2 text-xs font-medium text-gray-700 hover:text-blue-900 transition-colors"
               >
-                Login
+                Connexion
               </button>
               <button
                 onClick={() => setActiveTab("register")}
                 className="rounded-lg bg-blue-900 px-4 py-2 text-xs font-medium text-white shadow-sm hover:bg-blue-950 transition-colors"
               >
-                Become Client
+                Devenir client
               </button>
             </div>
           )}

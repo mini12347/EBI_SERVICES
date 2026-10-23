@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 
 import { clientDb } from "../clientDb";
-import { Lead } from "../types";
+import { apiCreateLead } from "../api/leads";
 import { post, get } from "../api/client";
 import { departmentKeyForName, getDepartment } from "../departments";
 
@@ -220,7 +220,7 @@ export default function AIChatbot({
   const [leadBudget, setLeadBudget] = useState("€10,000 - €25,000");
   const [leadDeadline, setLeadDeadline] = useState("3 Months");
   const [isSubmittingForm, setIsSubmittingForm] = useState(false);
-  const [formSubmitted, setFormSubmitted] = useState(false);
+  const [leadSubmitError, setLeadSubmitError] = useState("");
   const [conversationLang, setConversationLang] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -285,53 +285,86 @@ export default function AIChatbot({
     setInputText("");
     setIsLoading(true);
 
-    // Direct booking intent → show a message, then redirect logged-in clients
-    // straight to the Appointments History page (date + available slot picked there).
-    // Guests are asked to log in first.
+    const isClient = currentUser?.role === "client";
     const bookingIntent =
-      /(prendre|r[eé]server|programmer|planifier)\s+(un\s+|a\s+)?(rendez[- ]?vous|rdv|meeting|appointment|consultation)|(book|schedule|make)\s+(an?\s+)?(appointment|meeting|rdv)|je veux un rdv/i.test(
+      /(prendre|r[eé]server|programmer|planifier)\s+(un\s+|une\s+|a\s+)?(rendez[- ]?vous|rdv|meeting|appointment|consultation)|(book|schedule|make)\s+(an?\s+)?(appointment|meeting|rdv)|je veux un rdv/i.test(
         textToSend,
       );
-    if (bookingIntent) {
-      if (currentUser && currentUser.role === "client") {
+    const availabilityIntent =
+      /(disponibilit[eé]s?|cr[eé]neaux?|available\s+slots?|availability|what\s+times|quels?\s+horaires)/i.test(
+        textToSend,
+      );
+    const cancelAppointmentIntent =
+      /(annuler|supprimer|cancel)\s+(mon\s+|mes\s+|le\s+|un\s+)?(rendez[- ]?vous|rdv|appointment)/i.test(
+        textToSend,
+      );
+
+    if (bookingIntent || availabilityIntent || cancelAppointmentIntent) {
+      if (isClient) {
+        const destinationLabel =
+          msgLang === "fr" ? "section Rendez-vous" : "Appointments section";
+        const message =
+          msgLang === "fr"
+            ? `Je vous redirige vers la ${destinationLabel} de votre espace client pour consulter les créneaux et gérer votre demande.`
+            : `I’m redirecting you to the ${destinationLabel} in your client portal to check availability or manage your request.`;
+        redirectWithMessage(message, () => {
+          if (cancelAppointmentIntent && onOpenAppointments) {
+            onOpenAppointments();
+          } else if (onOpenBooking) {
+            onOpenBooking();
+          } else if (onOpenPortal) {
+            onOpenPortal();
+          }
+        });
+      } else {
+        const appointmentDescription =
+          msgLang === "fr"
+            ? `Demande de rendez-vous. Message du visiteur : "${textToSend}". Merci de le recontacter pour convenir d’un créneau.`
+            : `Appointment request. Visitor message: "${textToSend}". Please contact them to arrange a time.`;
+        setLeadDesc(appointmentDescription);
+        setLeadSubmitError("");
+        setShowLeadForm(true);
+        setIsLoading(false);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `appointment-request-${Date.now()}`,
+            sender: "bot",
+            text:
+              msgLang === "fr"
+                ? "Bien sûr. Indiquez vos coordonnées et vos disponibilités : notre équipe vous recontactera pour convenir d’un rendez-vous."
+                : "Of course. Share your contact details and preferred times, and our team will get in touch to arrange an appointment.",
+            timestamp: new Date(),
+          },
+        ]);
+      }
+      return;
+    }
+
+    // Existing appointments belong to the authenticated client account.
+    const viewAppointmentsIntent =
+      /voir\s+mes\s+(rdv|rendez[- ]?vous)|(see|view|list|show)\s+(my|all|the)\s+appointments?|my appointments/i.test(
+        textToSend,
+      );
+    if (viewAppointmentsIntent) {
+      if (isClient) {
         redirectWithMessage(
           msgLang === "fr"
-            ? "Très bien ! Je vous redirige vers la section **Appointments History** où vous pourrez choisir votre date et votre créneau disponible."
-            : "Great! I'm redirecting you to the **Appointments History** section where you can pick your date and an available time slot.",
+            ? "Je vous redirige vers la section Rendez-vous de votre espace client pour consulter vos réservations."
+            : "Redirecting you to the Appointments section of your client portal to review your bookings.",
           () => {
-            if (onOpenBooking) onOpenBooking();
+            if (onOpenAppointments) onOpenAppointments();
             else if (onOpenPortal) onOpenPortal();
           },
         );
       } else {
         redirectWithMessage(
           msgLang === "fr"
-            ? "Pour réserver une consultation, vous devez d'abord **vous connecter** en tant que client ou **créer un compte**.\n\nJe vous redirige vers la page de connexion."
-            : "To book a consultation, you first need to **log in** as a client or **create an account**.\n\nI'm redirecting you to the login page.",
-          () => {
-            if (onOpenLogin) onOpenLogin();
-            else if (onOpenPortal) onOpenPortal();
-          },
+            ? "Pour consulter vos rendez-vous, connectez-vous à votre espace client."
+            : "Please log in to your client portal to view your appointments.",
+          () => onOpenLogin?.(),
         );
       }
-      return;
-    }
-
-    // "Voir mes RDV" → show a message, then route to the appointments section.
-    const viewAppointmentsIntent =
-      /voir\s+mes\s+(rdv|rendez[- ]?vous)|(see|view|list|show)\s+(my|all|the)\s+appointments?|my appointments/i.test(
-        textToSend,
-      );
-    if (currentUser && currentUser.role === "client" && viewAppointmentsIntent) {
-      redirectWithMessage(
-        msgLang === "fr"
-          ? "Je vous redirige vers la section **Appointments History** de votre tableau de bord pour consulter vos rendez-vous."
-          : "Redirecting you to the **Appointments History** section of your dashboard to review your appointments.",
-        () => {
-          if (onOpenAppointments) onOpenAppointments();
-          else if (onOpenPortal) onOpenPortal();
-        },
-      );
       return;
     }
 
@@ -341,7 +374,6 @@ export default function AIChatbot({
         textToSend,
       );
     if (quoteIntent) {
-      const isClient = currentUser && currentUser.role === "client";
       redirectWithMessage(
         msgLang === "fr"
           ? "Parfait ! Je vous redirige vers la section **Request Quote** pour soumettre votre demande de devis."
@@ -362,26 +394,25 @@ export default function AIChatbot({
       const isAffirmative = /^(oui|ouais|ok|d'accord|bien sûr|bien sur|volontiers|je veux|vas-y|vas y|yes|yeah|yep|sure|absolutely|i do|i want|let's|lets|go ahead)/i.test(q) || q === "yes" || q === "oui";
       const isNegative = /^(non|no|nope|pas maintenant|plus tard|not now|later)/i.test(q);
       if (isAffirmative && !isNegative) {
-        if (currentUser && currentUser.role === "client") {
+        if (isClient) {
           redirectWithMessage(
             msgLang === "fr"
-              ? "Parfait ! Je vous redirige vers la section **Appointments History** pour finaliser votre réservation."
-              : "Perfect! I'm redirecting you to the **Appointments History** section to finalize your booking.",
+              ? "Parfait ! Je vous redirige vers la section Rendez-vous pour choisir un créneau."
+              : "Perfect! I’m redirecting you to the Appointments section to choose a time.",
             () => {
               if (onOpenBooking) onOpenBooking();
               else if (onOpenPortal) onOpenPortal();
             },
           );
         } else {
-          redirectWithMessage(
+          setLeadDesc(
             msgLang === "fr"
-              ? "Pour réserver une consultation, vous devez d'abord **vous connecter** en tant que client ou **créer un compte**.\n\nJe vous redirige vers la page de connexion."
-              : "To book a consultation, you first need to **log in** as a client or **create an account**.\n\nI'm redirecting you to the login page.",
-            () => {
-              if (onOpenLogin) onOpenLogin();
-              else if (onOpenPortal) onOpenPortal();
-            },
+              ? "Demande de rendez-vous. Merci de m’indiquer vos disponibilités."
+              : "Appointment request. Please let me know your preferred times.",
           );
+          setLeadSubmitError("");
+          setShowLeadForm(true);
+          setIsLoading(false);
         }
         return;
       } else if (isNegative) {
@@ -508,7 +539,9 @@ export default function AIChatbot({
           }, 800);
         }
       }
-    } catch {}  // Error handled below
+    } catch (error) {
+      console.error("EBI AI agent request failed", error);
+    }
 
     if (!agentUsed) {
       const errorMsg: ChatMessage = {
@@ -522,89 +555,21 @@ export default function AIChatbot({
     }
   };
 
-  const autoRegisterLead = async (analysis: any) => {
-    try {
-      const leads = clientDb.getLeads();
-      const newLead: Lead = {
-        id: `lead-${Date.now()}`,
-        name: analysis.name || "AI Lead Guest",
-        company: analysis.company || "Unknown",
-        email: analysis.email || "support@ebiservices.com",
-        phone: analysis.phone || "",
-        country: analysis.country || "France",
-        projectDescription:
-          analysis.projectDescription || "Discussed with AI Assistant",
-        budget: analysis.budget || "TBD",
-        deadline: analysis.deadline || "TBD",
-        status: "new",
-        suggestedDepartment: analysis.suggestedDepartment || "Development",
-        priority: analysis.priority || "medium",
-        createdAt: new Date().toISOString(),
-      };
-      leads.push(newLead);
-      clientDb.setLeads(leads);
-
-      await submitLeadToApi({
-        name: newLead.name,
-        company: newLead.company,
-        email: newLead.email,
-        phone: newLead.phone,
-        country: newLead.country,
-        projectDescription: newLead.projectDescription,
-        budget: newLead.budget,
-        deadline: newLead.deadline,
-        suggestedDepartment: newLead.suggestedDepartment,
-        priority: newLead.priority,
-        source: "chatbot",
-        userId: currentUser?.id || "",
-      });
-
-      clientDb.addActivityLog(
-        "usr-admin",
-        "AI Chatbot",
-        `Registered automated lead for ${newLead.name}`,
-      );
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `lead-ok-${Date.now()}`,
-          sender: "bot",
-          text: "[AI Notice]: I've automatically registered your project lead with EBI management! They will reach out to you shortly.",
-          timestamp: new Date(),
-        },
-      ]);
-      if (onLeadSubmitSuccess) onLeadSubmitSuccess();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const submitLeadToApi = async (leadData: Record<string, string>): Promise<boolean> => {
-    try {
-      const result = await post<{ message: string; lead: any }>('/leads', leadData);
-      return !!result && !!result.lead;
-    } catch {
-      return false;
-    }
-  };
-
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!leadName || !leadEmail || !leadDesc) return;
 
     setIsSubmittingForm(true);
-    let transmittedToSales = false;
+    setLeadSubmitError("");
     try {
-      const suggestedDepartment = leadDesc.toLowerCase().includes("recruit")
+      const description = leadDesc.toLocaleLowerCase("fr");
+      const suggestedDepartment = /(recrut|candidat|profil|talent)/.test(description)
         ? "Recruitment"
-        : leadDesc.toLowerCase().includes("call") ||
-            leadDesc.toLowerCase().includes("support") ||
-            leadDesc.toLowerCase().includes("outsource")
+        : /(call|appel|support|t[eé]l[eé]service|back.office|administratif|relation client)/.test(description)
           ? "Outsourcing"
           : "Development";
 
-      transmittedToSales = await submitLeadToApi({
+      await apiCreateLead({
         name: leadName,
         company: leadCompany || "Individual",
         email: leadEmail,
@@ -614,58 +579,27 @@ export default function AIChatbot({
         budget: leadBudget,
         deadline: leadDeadline,
         suggestedDepartment,
-        priority: "high",
         source: "chatbot",
         userId: currentUser?.id || "",
       });
 
-      const leads = clientDb.getLeads();
-      const newLead: Lead = {
-        id: `lead-${Date.now()}`,
-        name: leadName,
-        company: leadCompany || "Individual",
-        email: leadEmail,
-        phone: leadPhone,
-        country: leadCountry,
-        projectDescription: leadDesc,
-        budget: leadBudget,
-        deadline: leadDeadline,
-        status: "new",
-        suggestedDepartment,
-        priority: "high",
-        createdAt: new Date().toISOString(),
-      };
-      leads.push(newLead);
-      clientDb.setLeads(leads);
-
-      clientDb.addNotification(
-        "usr-admin",
-        "New Chat Lead Submitted",
-        `${leadName} from ${leadCompany || "Individual"} submitted an instant quote lead: €${leadBudget}.`,
-      );
-
-      clientDb.addActivityLog(
-        "usr-admin",
-        "AI Chatbot",
-        `New lead registered via chatbot: ${leadName}`,
-      );
-
-      setFormSubmitted(true);
       setShowLeadForm(false);
       setMessages((prev) => [
         ...prev,
         {
-          id: `form-success-${Date.now()}`,
+          id: `lead-success-${Date.now()}`,
           sender: "bot",
-          text: transmittedToSales
-            ? `Merci, ${leadName} ! Votre besoin a été transmis à notre **équipe commerciale** qui vous recontactera rapidement.\n\nThank you, ${leadName}! Your request has been sent to our **sales team** and they will reach out shortly.`
-            : `Thank you, ${leadName}! Your project lead for "${leadDesc.substring(0, 30)}..." has been received. Our directors have been notified and will verify your requirements.`,
+          text: `Merci, ${leadName} ! Votre demande a été enregistrée et transmise à notre équipe. Nous reviendrons vers vous.`,
           timestamp: new Date(),
         },
       ]);
       if (onLeadSubmitSuccess) onLeadSubmitSuccess();
     } catch (err) {
-      console.error(err);
+      setLeadSubmitError(
+        err instanceof Error
+          ? err.message
+          : "Erreur réseau lors de l’envoi de votre demande.",
+      );
     } finally {
       setIsSubmittingForm(false);
     }
@@ -675,41 +609,36 @@ export default function AIChatbot({
     {
       label: "Software Development",
       dept: "development",
-      text: "Tell me about your Software Development services and custom ERP solutions.",
+      text: "Quels services proposez-vous en développement d’applications web et métier ?",
     },
     {
       label: "IT Sourcing & Recruitment",
       dept: "recruitment",
-      text: "Tell me about your IT Sourcing & Recruitment services and how you pre-vet engineering candidates.",
+      text: "Quels services proposez-vous en recrutement IT et préqualification de candidats ?",
     },
     {
       label: "Tele-services & Support",
       dept: "teleservices",
-      text: "Tell me about your Tele-services & Support call center and bilingual customer support.",
+      text: "Quels services proposez-vous en téléservices et relation client ?",
     },
     {
-      label: "Business Process Outsourcing",
-      dept: "bpo",
-      text: "Tell me about your Business Process Outsourcing (BPO) services.",
+      label: "Demander un devis",
+      text: "Je souhaite demander un devis pour mon projet.",
     },
     {
-      label: "Request an Instant Quote",
-      text: "I would like to request a quotation for a custom enterprise project.",
+      label: "Prendre rendez-vous",
+      text: "Je souhaite prendre un rendez-vous.",
     },
     {
-      label: "Book Appointment",
-      text: "I want to book an appointment",
-    },
-    {
-      label: "Availability",
-      text: "What time slots are available?",
+      label: "Voir les disponibilités",
+      text: "Quels sont vos créneaux disponibles ?",
     },
   ];
   const handleOpenForm = () => {
     const formMsg: ChatMessage = {
       id: `bot-${Date.now()}`,
       sender: "bot",
-      text: "### Contact Form\n\nI'm redirecting you to our contact form.\n\nPlease fill in your information :\n- Name\n- Email\n- Phone\n- Your request\n\nOur team will get back to you shortly.",
+      text: "### Formulaire de contact\n\nJe vous redirige vers notre formulaire de contact pour transmettre votre demande à l’équipe EBI Services.",
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, formMsg]);
@@ -820,18 +749,18 @@ export default function AIChatbot({
                 <div className="flex items-center space-x-2 text-blue-950">
                   <Briefcase className="h-4 w-4" />
                   <span className="font-display text-xs font-bold uppercase tracking-wider">
-                    Instant Quote Lead Scoper
+                    Demande de contact
                   </span>
                 </div>
                 <p className="text-[11px] text-gray-600 leading-snug">
-                  Fill in your project information below. This automatically
-                  registers an active lead in our CRM pipeline.
+                  Décrivez votre besoin et indiquez vos coordonnées. Votre
+                  demande sera transmise à notre équipe.
                 </p>
 
                 <form onSubmit={handleFormSubmit} className="space-y-2">
                   <input
                     type="text"
-                    placeholder="Your Name *"
+                    placeholder="Votre nom *"
                     required
                     value={leadName}
                     onChange={(e) => setLeadName(e.target.value)}
@@ -839,7 +768,7 @@ export default function AIChatbot({
                   />
                   <input
                     type="text"
-                    placeholder="Company Name"
+                    placeholder="Entreprise"
                     value={leadCompany}
                     onChange={(e) => setLeadCompany(e.target.value)}
                     className="w-full rounded border border-gray-200 bg-white p-2 text-xs focus:ring-1 focus:ring-blue-900 focus:outline-none"
@@ -847,7 +776,7 @@ export default function AIChatbot({
                   <div className="grid grid-cols-2 gap-1.5">
                     <input
                       type="email"
-                      placeholder="Email Address *"
+                      placeholder="Adresse e-mail *"
                       required
                       value={leadEmail}
                       onChange={(e) => setLeadEmail(e.target.value)}
@@ -855,15 +784,14 @@ export default function AIChatbot({
                     />
                     <input
                       type="tel"
-                      placeholder="Phone *"
-                      required
+                      placeholder="Téléphone"
                       value={leadPhone}
                       onChange={(e) => setLeadPhone(e.target.value)}
                       className="rounded border border-gray-200 bg-white p-2 text-xs focus:ring-1 focus:ring-blue-900 focus:outline-none"
                     />
                   </div>
                   <textarea
-                    placeholder="Project Description (e.g. ERP integration, recruitment support, call center outsourcing) *"
+                    placeholder="Décrivez votre besoin (développement, recrutement, téléservices...) *"
                     required
                     rows={3}
                     value={leadDesc}
@@ -873,7 +801,7 @@ export default function AIChatbot({
                   <div className="grid grid-cols-2 gap-1.5">
                     <div>
                       <label className="block text-[9px] text-gray-500 font-bold uppercase">
-                        Budget Range
+                        Budget indicatif
                       </label>
                       <select
                         value={leadBudget}
@@ -889,7 +817,7 @@ export default function AIChatbot({
                     </div>
                     <div>
                       <label className="block text-[9px] text-gray-500 font-bold uppercase">
-                        Deadline
+                        Échéance
                       </label>
                       <select
                         value={leadDeadline}
@@ -904,20 +832,29 @@ export default function AIChatbot({
                     </div>
                   </div>
 
+                  {leadSubmitError && (
+                    <p
+                      role="alert"
+                      className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700"
+                    >
+                      {leadSubmitError}
+                    </p>
+                  )}
+
                   <div className="flex space-x-2 pt-1">
                     <button
                       type="submit"
                       disabled={isSubmittingForm}
                       className="flex-1 bg-blue-900 hover:bg-blue-950 text-white rounded py-2 text-xs font-semibold transition shadow-sm disabled:opacity-55"
                     >
-                      {isSubmittingForm ? "Submitting..." : "Register Lead"}
+                      {isSubmittingForm ? "Envoi en cours..." : "Envoyer ma demande"}
                     </button>
                     <button
                       type="button"
                       onClick={() => setShowLeadForm(false)}
                       className="border border-gray-300 text-gray-600 rounded px-3 py-2 text-xs hover:bg-gray-100 transition"
                     >
-                      Cancel
+                      Annuler
                     </button>
                   </div>
                 </form>
@@ -932,10 +869,20 @@ export default function AIChatbot({
             <div className="p-2 border-t border-gray-150 bg-slate-50/50">
               <div className="flex flex-wrap gap-1.5 p-1 max-h-24 overflow-y-auto">
                 <button
-                  onClick={handleOpenForm}
-                  className="rounded-full bg-gradient-to-r from-purple-600 to-pink-600 border-0 px-3 py-1 text-[10px] text-white font-semibold hover:from-purple-700 hover:to-pink-700 shadow-sm transition"
+                  onClick={() => {
+                    setLeadDesc("");
+                    setLeadSubmitError("");
+                    setShowLeadForm(true);
+                  }}
+                  className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[10px] font-semibold text-blue-900 shadow-sm transition hover:bg-blue-100"
                 >
-                  Contact Form
+                  Présenter mon besoin
+                </button>
+                <button
+                onClick={handleOpenForm}
+                className="rounded-full bg-gradient-to-r from-purple-600 to-pink-600 border-0 px-3 py-1 text-[10px] text-white font-semibold hover:from-purple-700 hover:to-pink-700 shadow-sm transition"
+                >
+                Formulaire de contact
                 </button>
                 {quickActions.map((action, i) => (
                   <button
@@ -958,7 +905,7 @@ export default function AIChatbot({
           <div className="p-3 border-t border-gray-200 bg-white flex items-center space-x-2">
             <input
               type="text"
-              placeholder="Ask anything about our services..."
+              placeholder="Posez votre question sur nos services..."
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={(e) =>

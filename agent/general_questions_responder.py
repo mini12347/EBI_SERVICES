@@ -1,10 +1,6 @@
-from config import GROQ_API_KEY, GROQ_MODEL
-from groq import Groq
+from config import GROQ_MODEL
+from groq_client import get_groq_client
 import os
-
-client = Groq(
-    api_key=GROQ_API_KEY
-)
 
 LANGUAGE_INSTRUCTIONS = {
     "fr": "Reponds obligatoirement en francais.",
@@ -83,7 +79,7 @@ def generate_response(query, context=None, lang="fr"):
                 "(s'inscrire, contacter, demander un devis, reserver une consultation)."
             )
 
-    response = client.chat.completions.create(
+    response = get_groq_client().chat.completions.create(
         model=os.environ.get("GROQ_MODEL", GROQ_MODEL),
         messages=[
             {"role": "system", "content": system_prompt},

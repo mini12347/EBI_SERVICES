@@ -20,11 +20,25 @@ export interface ApiLead {
   updatedAt: string;
 }
 
+export interface CreateLeadInput {
+  name: string;
+  email: string;
+  projectDescription: string;
+  company?: string;
+  phone?: string;
+  country?: string;
+  budget?: string;
+  deadline?: string;
+  suggestedDepartment?: string;
+  source: 'chatbot' | 'contact_form';
+  userId?: string;
+}
+
 export async function apiGetLeads() {
   return get<ApiLead[]>('/leads');
 }
 
-export async function apiCreateLead(body: Record<string, string>) {
+export async function apiCreateLead(body: CreateLeadInput) {
   return post<{ message: string; lead: ApiLead }>('/leads', body);
 }
 

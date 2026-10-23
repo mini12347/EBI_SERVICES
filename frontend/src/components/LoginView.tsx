@@ -4,7 +4,7 @@ import { post } from "../api/client";
 import { clientDb } from "../clientDb";
 
 interface LoginViewProps {
-  onLogin: (user: any, jwtToken: string) => void;
+  onLogin: (user: any, jwtToken: string, refreshToken?: string) => void;
   onNavigate: (tab: string) => void;
 }
 
@@ -23,7 +23,7 @@ export default function LoginView({ onLogin, onNavigate }: LoginViewProps) {
     if (!email || !password) return;
 
     try {
-      const data = await post<{ access_token: string; _id: string; email: string; fullname: string; role: string }>("/auth/login", { email, password });
+      const data = await post<{ access_token: string; refresh_token: string; _id: string; email: string; fullname: string; role: string }>("/auth/login", { email, password });
       if (data && data.access_token) {
         const mappedUser = {
           id: data._id,
@@ -33,7 +33,7 @@ export default function LoginView({ onLogin, onNavigate }: LoginViewProps) {
           companyId: "EBI Services",
           createdAt: new Date().toISOString(),
         };
-        onLogin(mappedUser, data.access_token);
+        onLogin(mappedUser, data.access_token, data.refresh_token);
         clientDb.addActivityLog(data._id, data.fullname, "User logged in successfully (API)");
         setEmail("");
         setPassword("");
@@ -44,7 +44,11 @@ export default function LoginView({ onLogin, onNavigate }: LoginViewProps) {
         setError("Please verify your email address before logging in. Check your inbox for the verification link.");
         return;
       }
-      // Backend unavailable or other error, fall back to clientDb
+      if (err?.status && err.status !== 401) {
+        setError(err.message || "The authentication service is unavailable. Please try again later.");
+        return;
+      }
+      // A matching local demo account can still sign in without a backend session.
     }
 
     try {

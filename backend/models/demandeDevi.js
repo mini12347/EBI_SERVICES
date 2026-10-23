@@ -10,8 +10,12 @@ const demandeDevisSchema = new mongoose.Schema(
     client: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     service: { type: mongoose.Schema.Types.ObjectId, ref: 'Service', required: true },
     manager: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // admin assigné
+    archivedAt: { type: Date, default: null },
 
     besoin: { type: String, required: true },
+    secteur: { type: String, trim: true },
+    budget: { type: String, trim: true },
+    delai: { type: String, trim: true },
     statut: {
       type: String,
       enum: ['en_attente', 'en_cours', 'devis_envoye', 'accepte', 'refuse'],
